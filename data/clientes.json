@@ -1,0 +1,5 @@
+[
+  {"id":"cli-solaris","name":"Grupo Solaris","industria":"Retail","contacto":"Laura Méndez"},
+  {"id":"cli-novatech","name":"NovaTech","industria":"Tecnología","contacto":"Diego Pérez"},
+  {"id":"cli-verum","name":"Casa Verum","industria":"Bienes raíces","contacto":"Karla Ibarra"}
+]

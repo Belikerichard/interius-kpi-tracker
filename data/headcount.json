@@ -1,0 +1,8 @@
+[
+  {"id":"hc-001","area":"Cuentas","periodo":"2026-06","headcount":18,"meta":20},
+  {"id":"hc-002","area":"Creativo","periodo":"2026-06","headcount":14,"meta":14},
+  {"id":"hc-003","area":"Medios","periodo":"2026-06","headcount":12,"meta":15},
+  {"id":"hc-004","area":"Operaciones","periodo":"2026-06","headcount":9,"meta":9},
+  {"id":"hc-005","area":"Cuentas","periodo":"2026-05","headcount":17,"meta":20},
+  {"id":"hc-006","area":"Medios","periodo":"2026-05","headcount":13,"meta":15}
+]

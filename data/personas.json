@@ -1,0 +1,6 @@
+[
+  {"id":"per-mariana","name":"Mariana Cobos","rol":"Directora de Cuentas","reportsTo":null},
+  {"id":"per-ana","name":"Ana Torres","rol":"Account Manager","reportsTo":"per-mariana"},
+  {"id":"per-luis","name":"Luis Herrera","rol":"Media Buyer","reportsTo":"per-ana"},
+  {"id":"per-sofia","name":"Sofía Ramírez","rol":"Content Strategist","reportsTo":"per-ana"}
+]

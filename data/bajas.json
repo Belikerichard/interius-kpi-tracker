@@ -1,0 +1,7 @@
+[
+  {"id":"baja-001","empleado":"Jorge Nava","area":"Medios","fecha":"2026-06-10","tipo":"Voluntaria","motivo":"Mejor oferta salarial"},
+  {"id":"baja-002","empleado":"Paola Rivas","area":"Cuentas","fecha":"2026-05-22","tipo":"Involuntaria","motivo":"Reestructura de cuenta"},
+  {"id":"baja-003","empleado":"Iván Contreras","area":"Creativo","fecha":"2026-04-14","tipo":"Voluntaria","motivo":"Cambio de carrera"},
+  {"id":"baja-004","empleado":"Renata Suárez","area":"Operaciones","fecha":"2026-02-02","tipo":"Voluntaria","motivo":"Reubicación"},
+  {"id":"baja-005","empleado":"Diego Salas","area":"Medios","fecha":"2025-11-18","tipo":"Involuntaria","motivo":"Bajo desempeño"}
+]
