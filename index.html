@@ -6,9 +6,24 @@
     <title>Interius · KPI Tracker</title>
     <link rel="stylesheet" href="css/styles.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
-    <div class="app">
+    <!-- ===================== LOGIN ===================== -->
+    <div class="login-screen" id="view-login">
+      <div class="login-card">
+        <div class="brand" style="justify-content: center"><span class="bracket">[</span> Interius <span class="bracket">]</span></div>
+        <p>Inicia sesión con tu cuenta de Google para entrar al KPI Tracker.</p>
+        <div id="g-signin-button"></div>
+        <div class="login-denied" id="login-denied" style="display: none">
+          <p>La cuenta <strong id="login-denied-email"></strong> no tiene acceso a este tracker.</p>
+          <p>Pide a un Super Admin que te agregue en <code>data/personas.json</code>.</p>
+          <button class="btn secondary" id="btn-try-another">Usar otra cuenta</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="app" id="app-shell" style="display: none">
       <div class="sidebar">
         <div class="brand"><span class="bracket">[</span> Interius <span class="bracket">]</span></div>
         <div class="navbtn active" data-view="dashboard">
@@ -63,12 +78,16 @@
           People Analytics
         </div>
         <div class="sidebar-foot">
+          <div class="user-badge" id="user-badge"></div>
           Tracker interno · KPI de negocio y desempeño
           <div
             id="btn-restore-source"
             style="margin-top: 10px; cursor: pointer; text-decoration: underline; color: rgba(255, 255, 255, 0.6)"
           >
             Restaurar datos de origen
+          </div>
+          <div id="btn-logout" style="margin-top: 6px; cursor: pointer; text-decoration: underline; color: rgba(255, 255, 255, 0.6)">
+            Cerrar sesión
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { appData } from './state.js';
 import { uid, showToast } from './utils.js';
+import { canEdit } from './permissions.js';
 import { persist } from './data.js';
 import { renderClientesGrid } from './views/clientes.js';
 import { renderEquipoGrid, openPersonaDetalle } from './views/equipo.js';
@@ -26,6 +27,7 @@ document.getElementById('btn-add-cliente').addEventListener('click', () => {
   openModal('modal-cliente');
 });
 document.getElementById('mc-save').addEventListener('click', async () => {
+  if (!canEdit()) return;
   const name = document.getElementById('mc-name').value.trim();
   if (!name) {
     showToast('Ponle un nombre al cliente');
@@ -74,6 +76,7 @@ export function openPersonaModal(id) {
 }
 
 document.getElementById('mp-save').addEventListener('click', async () => {
+  if (!canEdit()) return;
   const name = document.getElementById('mp-name').value.trim();
   if (!name) {
     showToast('Ponle un nombre a la persona');
@@ -125,6 +128,7 @@ export function openKpiModal(id) {
 }
 
 document.getElementById('mk-save').addEventListener('click', async () => {
+  if (!canEdit()) return;
   const name = document.getElementById('mk-name').value.trim();
   const meta = Number(document.getElementById('mk-meta').value);
   if (!name || !meta) {

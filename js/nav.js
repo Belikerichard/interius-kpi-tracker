@@ -4,6 +4,7 @@ import { renderEquipoGrid } from './views/equipo.js';
 import { renderKpiTable } from './views/kpis.js';
 import { renderOrganigrama } from './views/organigrama.js';
 import { renderPeopleView } from './views/people.js';
+import { canViewPeopleAnalytics } from './permissions.js';
 
 const VIEW_IDS = {
   dashboard: 'view-dashboard',
@@ -17,6 +18,7 @@ const VIEW_IDS = {
 };
 
 export function switchView(name) {
+  if (name === 'people' && !canViewPeopleAnalytics()) name = 'dashboard';
   document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
   document.querySelectorAll('.navbtn').forEach((b) => b.classList.remove('active'));
   document.getElementById(VIEW_IDS[name]).classList.add('active');

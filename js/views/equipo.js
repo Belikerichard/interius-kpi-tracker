@@ -1,22 +1,24 @@
 import { appData } from '../state.js';
 import { colorFor, initials } from '../utils.js';
-import { achievement, kpisByPersona, avgAchievement, ratingFromScore, statusOf, clienteName, personaName } from '../calc.js';
+import { achievement, avgAchievement, ratingFromScore, statusOf, clienteName, personaName } from '../calc.js';
+import { visiblePersonas, visibleKpisByPersona, canEdit } from '../permissions.js';
 import { openPersonaModal } from '../modals.js';
 
 export function renderEquipoGrid() {
   const grid = document.getElementById('equipo-grid');
-  if (!appData.personas.length) {
+  const personas = visiblePersonas();
+  if (!personas.length) {
     grid.innerHTML = `<div class="empty">Aún no hay integrantes. Agrega el primero.</div>`;
     return;
   }
-  grid.innerHTML = appData.personas
+  grid.innerHTML = personas
     .map((p) => {
-      const kpis = kpisByPersona(p.id);
+      const kpis = visibleKpisByPersona(p.id);
       const avg = Math.round(avgAchievement(kpis));
       const rating = ratingFromScore(kpis.length ? avg : 100);
       return `<div class="entity-card clickable" data-persona="${p.id}">
       <div class="top-row">
-        <div class="avatar" style="background:${colorFor(p.id, appData.personas)}">${initials(p.name)}</div>
+        <div class="avatar" style="background:${colorFor(p.id, personas)}">${initials(p.name)}</div>
         <span class="badge" style="background:${rating.color}22;color:${rating.color}">${kpis.length ? rating.label : 'Sin KPIs'}</span>
       </div>
       <div class="name">${p.name}</div>
@@ -36,7 +38,7 @@ export function renderEquipoGrid() {
 
 export function openPersonaDetalle(id) {
   const p = appData.personas.find((x) => x.id === id);
-  const kpis = kpisByPersona(id);
+  const kpis = visibleKpisByPersona(id);
   const avg = Math.round(avgAchievement(kpis));
   const rating = ratingFromScore(kpis.length ? avg : 100);
   const clientesInv = [...new Set(kpis.map((k) => k.clienteId))].map((cid) => appData.clientes.find((c) => c.id === cid)).filter(Boolean);
@@ -49,7 +51,7 @@ export function openPersonaDetalle(id) {
         <h1>${p.name}</h1>
         <p>${p.rol || 'Sin puesto asignado'}${managerName ? ' · Reporta a ' + managerName : ' · Nivel superior'}</p>
       </div>
-      <button class="btn secondary" id="btn-edit-persona">Editar</button>
+      ${canEdit() ? `<button class="btn secondary" id="btn-edit-persona">Editar</button>` : ''}
     </div>
     <div class="cards-row">
       <div class="stat-card"><div class="label">Cumplimiento promedio</div><div class="value">${kpis.length ? avg + '%' : '—'}</div></div>
@@ -107,5 +109,6 @@ export function openPersonaDetalle(id) {
       </div>
     </div>
   `;
-  document.getElementById('btn-edit-persona').addEventListener('click', () => openPersonaModal(id));
+  const editBtn = document.getElementById('btn-edit-persona');
+  if (editBtn) editBtn.addEventListener('click', () => openPersonaModal(id));
 }

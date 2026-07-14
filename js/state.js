@@ -11,6 +11,7 @@ export let appData = {
   bajas: [],
   empleados: [],
   rotacionMeta: 15,
+  googleClientId: '',
 };
 
 export function setAppData(data) {

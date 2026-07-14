@@ -1,23 +1,25 @@
 import { appData } from '../state.js';
 import { colorFor, initials } from '../utils.js';
-import { achievement, kpisByCliente, kpisByPersona, avgAchievement, statusOf, statusLabel, personaName } from '../calc.js';
+import { achievement, avgAchievement, statusOf, statusLabel, personaName } from '../calc.js';
+import { visibleClientes, visibleKpisByCliente, visibleKpisByPersona } from '../permissions.js';
 import { switchView } from '../nav.js';
 import { openPersonaDetalle } from './equipo.js';
 
 export function renderClientesGrid() {
   const grid = document.getElementById('clientes-grid');
-  if (!appData.clientes.length) {
+  const clientes = visibleClientes();
+  if (!clientes.length) {
     grid.innerHTML = `<div class="empty">Aún no hay clientes. Agrega el primero.</div>`;
     return;
   }
-  grid.innerHTML = appData.clientes
+  grid.innerHTML = clientes
     .map((c) => {
-      const kpis = kpisByCliente(c.id);
+      const kpis = visibleKpisByCliente(c.id);
       const avg = Math.round(avgAchievement(kpis));
       const st = statusOf(avg);
       return `<div class="entity-card clickable" data-cliente="${c.id}">
       <div class="top-row">
-        <div class="avatar" style="background:${colorFor(c.id, appData.clientes)}">${initials(c.name)}</div>
+        <div class="avatar" style="background:${colorFor(c.id, clientes)}">${initials(c.name)}</div>
         <span class="badge ${st}">${statusLabel(st)}</span>
       </div>
       <div class="name">${c.name}</div>
@@ -37,7 +39,7 @@ export function renderClientesGrid() {
 
 export function openClienteDetalle(id) {
   const c = appData.clientes.find((x) => x.id === id);
-  const kpis = kpisByCliente(id);
+  const kpis = visibleKpisByCliente(id);
   const avg = Math.round(avgAchievement(kpis));
   const st = statusOf(avg);
   const involucrados = [...new Set(kpis.map((k) => k.personaId))].map((pid) => appData.personas.find((p) => p.id === pid)).filter(Boolean);
@@ -81,7 +83,7 @@ export function openClienteDetalle(id) {
           involucrados.length
             ? involucrados
                 .map((p) => {
-                  const pkpis = kpisByPersona(p.id).filter((k) => k.clienteId === id);
+                  const pkpis = visibleKpisByPersona(p.id).filter((k) => k.clienteId === id);
                   const pavg = Math.round(avgAchievement(pkpis));
                   return `<div class="kpi-list-item clickable" data-persona="${p.id}">
             <div style="display:flex;align-items:center;gap:10px;">

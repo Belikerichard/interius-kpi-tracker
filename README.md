@@ -10,11 +10,13 @@ interius-kpi-tracker/
 ├── css/
 │   └── styles.css        → estilos (marca Interius)
 ├── js/
-│   ├── app.js             → entry point: importa todo y arranca la app
+│   ├── app.js             → entry point: importa todo, gate de login y arranca la app
 │   ├── state.js           → estado compartido (appData) y su setter
 │   ├── calc.js             → cálculos puros (achievement, avgAchievement, ratings...)
 │   ├── data.js            → carga/persistencia (fetch a /data, localStorage)
 │   ├── utils.js            → helpers de UI y fechas (toast, initials, antigüedad...)
+│   ├── auth.js              → login con Google, sesión, rol del usuario actual
+│   ├── permissions.js       → qué puede ver/editar cada rol
 │   ├── nav.js               → cambio entre vistas principales
 │   ├── modals.js            → alta/edición de cliente, persona y KPI
 │   └── views/
@@ -31,7 +33,7 @@ interius-kpi-tracker/
     ├── headcount.json     → tabla de headcount por área / período
     ├── bajas.json         → tabla de bajas (voluntarias / involuntarias)
     ├── empleados.json     → tabla de empleados para antigüedad y antigüedad en el puesto
-    └── config.json        → configuración general (ej. meta de rotación)
+    └── config.json        → configuración general (meta de rotación, Google Client ID)
 ```
 
 `js/app.js` se carga como `<script type="module">`, así que cada archivo de
@@ -45,7 +47,7 @@ haz los ajustes finos desde la propia app.
 
 > Cuando quieras conectar una fuente de datos real (una base de datos, un API,
 > Google Sheets, etc.), el único lugar que tendrías que tocar es la función
-> `loadSourceTables()` en `js/app.js`: hoy hace `fetch()` a estos JSON, pero podrías
+> `loadSourceTables()` en `js/data.js`: hoy hace `fetch()` a estos JSON, pero podrías
 > apuntarla a tu API sin cambiar el resto de la aplicación.
 
 ## Cómo funciona la persistencia
@@ -91,6 +93,46 @@ npm install   # una sola vez, instala eslint + prettier como devDependencies
 npm run lint    # ESLint sobre js/
 npm run format  # Prettier sobre js/, css/ y *.html
 ```
+
+## Login con Google y roles
+
+La app pide iniciar sesión con una cuenta de Google antes de mostrar cualquier
+vista. El rol de cada quien sale de `data/personas.json` (campos `email` y
+`role`); si el correo con el que alguien entra no aparece ahí (o no tiene
+`role`), se le niega el acceso.
+
+Roles disponibles:
+
+| Rol | Ve | Edita |
+|---|---|---|
+| `super_admin` | Todo | Todo (clientes, equipo, KPIs) |
+| `admin` | Todo excepto People Analytics | Nada |
+| `usuario` | Solo los clientes/KPIs donde es responsable, y a sí mismo en Equipo/Organigrama | Nada |
+
+### Configurar tu Google OAuth Client ID
+
+1. En [Google Cloud Console](https://console.cloud.google.com/apis/credentials), crea
+   un **OAuth 2.0 Client ID** de tipo "Aplicación web".
+2. Agrega el/los orígenes donde correrá la app (ej. `http://localhost:3000` para
+   desarrollo, y tu dominio real en producción) en **Authorized JavaScript origins**.
+3. Copia el Client ID (`....apps.googleusercontent.com`) y pégalo en el campo
+   `googleClientId` de `data/config.json`, reemplazando el placeholder.
+
+### Dar de alta o cambiar accesos
+
+Edita `data/personas.json` y agrégale `email` (la cuenta de Google con la que
+esa persona inicia sesión) y `role` (`super_admin`, `admin` o `usuario`) a
+quien necesite entrar. Quien no tenga esos dos campos no puede iniciar sesión.
+
+### ⚠️ Esto no es un perímetro de seguridad real
+
+Este proyecto es HTML/CSS/JS estático sin backend: los archivos `/data/*.json`
+son públicos para cualquiera que los pida, y el ID token de Google se
+decodifica en el navegador sin verificar su firma. El login sirve para dar
+identidad y ocultar/filtrar la interfaz según el rol — no para proteger
+información sensible de alguien con las herramientas de desarrollador
+abiertas. Si eso te importa (datos realmente confidenciales), la data y la
+verificación del login necesitan vivir en un backend real.
 
 ## Módulos de la app
 

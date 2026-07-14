@@ -1,11 +1,11 @@
-import { appData } from '../state.js';
-import { achievement, statusOf, avgAchievement, kpisByCliente, kpisByPersona, clienteName, personaName } from '../calc.js';
+import { achievement, statusOf, avgAchievement, clienteName, personaName } from '../calc.js';
+import { visibleClientes, visiblePersonas, visibleKpis, visibleKpisByCliente, visibleKpisByPersona } from '../permissions.js';
 
 let chartClientes = null;
 let chartEquipo = null;
 
 export function renderDashboard() {
-  const kpis = appData.kpis;
+  const kpis = visibleKpis();
   const total = kpis.length;
   const enMeta = kpis.filter((k) => statusOf(achievement(k)) === 'ok').length;
   const enRiesgo = kpis.filter((k) => statusOf(achievement(k)) === 'warn').length;
@@ -19,8 +19,9 @@ export function renderDashboard() {
     <div class="stat-card"><div class="sq"></div><div class="label">Críticos</div><div class="value" style="color:var(--rojo)">${critico}</div><div class="sub">acción inmediata</div></div>
   `;
 
-  const clienteLabels = appData.clientes.map((c) => c.name);
-  const clienteData = appData.clientes.map((c) => Math.round(avgAchievement(kpisByCliente(c.id))));
+  const clientes = visibleClientes();
+  const clienteLabels = clientes.map((c) => c.name);
+  const clienteData = clientes.map((c) => Math.round(avgAchievement(visibleKpisByCliente(c.id))));
   if (chartClientes) chartClientes.destroy();
   chartClientes = new Chart(document.getElementById('chart-clientes'), {
     type: 'bar',
@@ -28,8 +29,9 @@ export function renderDashboard() {
     options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: (v) => v + '%' } } } },
   });
 
-  const personaLabels = appData.personas.map((p) => p.name);
-  const personaData = appData.personas.map((p) => Math.round(avgAchievement(kpisByPersona(p.id))));
+  const personas = visiblePersonas();
+  const personaLabels = personas.map((p) => p.name);
+  const personaData = personas.map((p) => Math.round(avgAchievement(visibleKpisByPersona(p.id))));
   if (chartEquipo) chartEquipo.destroy();
   chartEquipo = new Chart(document.getElementById('chart-equipo'), {
     type: 'bar',

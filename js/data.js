@@ -24,7 +24,16 @@ export async function loadSourceTables() {
     fetch('data/empleados.json').then((r) => r.json()),
     fetch('data/config.json').then((r) => r.json()),
   ]);
-  return { clientes, personas, kpis, headcount, bajas, empleados, rotacionMeta: config.rotacionMeta };
+  return {
+    clientes,
+    personas,
+    kpis,
+    headcount,
+    bajas,
+    empleados,
+    rotacionMeta: config.rotacionMeta,
+    googleClientId: config.googleClientId,
+  };
 }
 
 export async function loadData() {
@@ -36,6 +45,11 @@ export async function loadData() {
       if (!parsed.bajas) parsed.bajas = [];
       if (!parsed.empleados) parsed.empleados = [];
       if (parsed.rotacionMeta === undefined) parsed.rotacionMeta = 15;
+      if (!parsed.googleClientId) {
+        /* Cache viejo de antes del login: toma el client ID actual de /data/config.json
+           sin pisar el resto de los datos ya guardados. */
+        parsed.googleClientId = (await fetch('data/config.json').then((r) => r.json())).googleClientId;
+      }
       setAppData(parsed);
       return;
     } catch {
