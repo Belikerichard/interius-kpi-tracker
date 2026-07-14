@@ -8,6 +8,7 @@
    la UI según el rol, no para proteger datos sensibles de verdad. Si eso
    importa, se necesita mover la data y la verificación a un backend real. */
 import { appData } from './state.js';
+import { persist } from './data.js';
 
 const SESSION_KEY = 'interius-kpi-tracker-session';
 
@@ -42,10 +43,31 @@ function decodeJwtPayload(token) {
   return JSON.parse(json);
 }
 
-function resolveCredential(response) {
+function findAuthorizedPersona(email) {
+  return appData.personas.find((p) => p.email && p.email.toLowerCase() === email && p.role);
+}
+
+/* Si el correo no aparece en el appData ya cacheado en localStorage, puede
+   ser porque /data/personas.json se actualizó (nuevo acceso dado de alta)
+   después de que este navegador guardó su copia. Antes de negar el acceso,
+   se refresca personas.json desde el origen y se reintenta una vez. */
+async function refreshPersonasFromSource() {
+  try {
+    appData.personas = await fetch('data/personas.json').then((r) => r.json());
+    await persist();
+  } catch {
+    /* sin conexión al origen: seguimos con lo que ya había en caché */
+  }
+}
+
+async function resolveCredential(response) {
   const payload = decodeJwtPayload(response.credential);
   const email = (payload.email || '').toLowerCase();
-  const persona = appData.personas.find((p) => p.email && p.email.toLowerCase() === email && p.role);
+  let persona = findAuthorizedPersona(email);
+  if (!persona) {
+    await refreshPersonasFromSource();
+    persona = findAuthorizedPersona(email);
+  }
   if (!persona) return { ok: false, email, name: payload.name };
   currentUser = { email, name: payload.name, picture: payload.picture, role: persona.role, personaId: persona.id };
   localStorage.setItem(SESSION_KEY, JSON.stringify(currentUser));
@@ -71,7 +93,7 @@ export async function initGoogleSignIn(clientId, buttonEl, onResult) {
   }
   window.google.accounts.id.initialize({
     client_id: clientId,
-    callback: (response) => onResult(resolveCredential(response)),
+    callback: async (response) => onResult(await resolveCredential(response)),
   });
   window.google.accounts.id.renderButton(buttonEl, { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', width: 280 });
   window.google.accounts.id.prompt();
