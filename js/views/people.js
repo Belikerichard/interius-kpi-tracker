@@ -95,11 +95,19 @@ function renderHC() {
   const totalMeta = Object.values(metaByArea).reduce((a, b) => a + b, 0);
   const cumplimiento = totalMeta ? Math.round((totalActual / totalMeta) * 100) : null;
 
+  const cumplColor = cumplimiento === null ? 'inherit' : statusOf(cumplimiento) === 'ok' ? 'var(--verde)' : statusOf(cumplimiento) === 'warn' ? 'var(--amarillo)' : 'var(--rojo)';
   document.getElementById('hc-stats').innerHTML = `
-    <div class="stat-card"><div class="sq"></div><div class="label">Headcount actual</div><div class="value">${totalActual}</div><div class="sub">activos a ${MESES[month]} ${year} (Estatus = Activo)</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Crecimiento vs mes anterior</div><div class="value" style="color:${growthColor(crecMoM)}">${growthSub(crecMoM)}</div><div class="sub">${totalPrevMonth} → ${totalActual}</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Crecimiento vs año anterior</div><div class="value" style="color:${growthColor(crecYoY)}">${growthSub(crecYoY)}</div><div class="sub">${totalPrevYear} → ${totalActual}</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Cumplimiento vs meta</div><div class="value" style="color:${cumplimiento === null ? 'inherit' : statusOf(cumplimiento) === 'ok' ? 'var(--verde)' : statusOf(cumplimiento) === 'warn' ? 'var(--amarillo)' : 'var(--rojo)'}">${cumplimiento !== null ? cumplimiento + '%' : '—'}</div><div class="sub">meta total ${totalMeta || '—'}</div></div>
+    <div class="stat-card" style="grid-column:1/-1">
+      <div class="sq"></div>
+      <div class="label">Headcount actual</div>
+      <div class="value">${totalActual}</div>
+      <div class="sub">activos a ${MESES[month]} ${year} (Estatus = Activo) · meta total ${totalMeta || '—'}</div>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid #eeeef4">
+        <div><div class="sub" style="margin:0">vs mes anterior</div><strong style="color:${growthColor(crecMoM)}">${growthSub(crecMoM)}</strong> <span class="sub" style="margin:0">(${totalPrevMonth} → ${totalActual})</span></div>
+        <div><div class="sub" style="margin:0">vs año anterior</div><strong style="color:${growthColor(crecYoY)}">${growthSub(crecYoY)}</strong> <span class="sub" style="margin:0">(${totalPrevYear} → ${totalActual})</span></div>
+        <div><div class="sub" style="margin:0">cumplimiento vs meta</div><strong style="color:${cumplColor}">${cumplimiento !== null ? cumplimiento + '%' : '—'}</strong></div>
+      </div>
+    </div>
   `;
 
   const countsByArea = countByArea(roster);
