@@ -104,6 +104,7 @@ export async function loadEmpleadosFromSheet(sheetId) {
           empleado: nombre,
           area,
           fecha,
+          fechaIngreso, // para reconstruir headcount histórico (ver headcountAsOf en calc.js)
           tipo: r['Tipo de Baja'] === 'Involuntaria' ? 'Involuntaria' : 'Voluntaria',
           motivo: r['Motivo de Baja'] || '',
         });

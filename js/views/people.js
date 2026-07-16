@@ -1,6 +1,10 @@
 import { appData } from '../state.js';
-import { achievement, statusOf, statusLabel, latestHCByArea } from '../calc.js';
+import { achievement, statusOf, statusLabel, latestHCByArea, headcountAsOf, lastDayOfMonth, pctChange } from '../calc.js';
 import { tenureYears, fmtYears, tenureBuckets } from '../utils.js';
+
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const today = new Date();
+let hcFiltro = { year: today.getFullYear(), month: today.getMonth() }; // month: 0-11
 
 let currentSubtab = 'hc';
 let chartHC = null,
@@ -31,26 +35,85 @@ document.querySelectorAll('.subtab').forEach((t) => {
 });
 
 /* ---- HC ---- */
-function renderHC() {
-  const latest = latestHCByArea();
-  const totalActual = latest.reduce((a, r) => a + Number(r.headcount || 0), 0);
-  const totalMeta = latest.reduce((a, r) => a + Number(r.meta || 0), 0);
-  const cumplimiento = totalMeta ? Math.round((totalActual / totalMeta) * 100) : null;
-  document.getElementById('hc-stats').innerHTML = `
-    <div class="stat-card"><div class="sq"></div><div class="label">Headcount actual</div><div class="value">${totalActual}</div><div class="sub">último período por área</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Meta de headcount</div><div class="value">${totalMeta || '—'}</div><div class="sub">suma de metas por área</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Cumplimiento</div><div class="value" style="color:${cumplimiento === null ? 'inherit' : statusOf(cumplimiento) === 'ok' ? 'var(--verde)' : statusOf(cumplimiento) === 'warn' ? 'var(--amarillo)' : 'var(--rojo)'}">${cumplimiento !== null ? cumplimiento + '%' : '—'}</div><div class="sub">vs meta total</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Áreas registradas</div><div class="value">${latest.length}</div><div class="sub">con headcount activo</div></div>
+function countByArea(roster) {
+  const map = {};
+  roster.forEach((r) => (map[r.area] = (map[r.area] || 0) + 1));
+  return map;
+}
+
+function growthSub(pct) {
+  if (pct === null) return 'sin dato del período anterior';
+  const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '—';
+  return `${arrow} ${Math.abs(pct).toFixed(1)}%`;
+}
+
+function growthColor(pct) {
+  if (pct === null) return 'inherit';
+  return pct > 0 ? 'var(--verde)' : pct < 0 ? 'var(--rojo)' : 'inherit';
+}
+
+function renderHCFiltro() {
+  const years = new Set([today.getFullYear()]);
+  [...appData.empleados, ...appData.bajas].forEach((r) => {
+    if (r.fechaIngreso) years.add(Number(r.fechaIngreso.slice(0, 4)));
+  });
+  const yearOpts = [...years]
+    .sort((a, b) => b - a)
+    .map((y) => `<option value="${y}" ${y === hcFiltro.year ? 'selected' : ''}>${y}</option>`)
+    .join('');
+  const monthOpts = MESES.map((m, i) => `<option value="${i}" ${i === hcFiltro.month ? 'selected' : ''}>${m}</option>`).join('');
+  document.getElementById('hc-filtro').innerHTML = `
+    <select id="hc-mes">${monthOpts}</select>
+    <select id="hc-anio">${yearOpts}</select>
   `;
+  document.getElementById('hc-mes').addEventListener('change', (e) => {
+    hcFiltro.month = Number(e.target.value);
+    renderHC();
+  });
+  document.getElementById('hc-anio').addEventListener('change', (e) => {
+    hcFiltro.year = Number(e.target.value);
+    renderHC();
+  });
+}
+
+function renderHC() {
+  renderHCFiltro();
+
+  const { year, month } = hcFiltro;
+  const cutoff = lastDayOfMonth(year, month);
+  const cutoffPrevMonth = lastDayOfMonth(month === 0 ? year - 1 : year, month === 0 ? 11 : month - 1);
+  const cutoffPrevYear = lastDayOfMonth(year - 1, month);
+
+  const roster = headcountAsOf(cutoff);
+  const totalActual = roster.length;
+  const totalPrevMonth = headcountAsOf(cutoffPrevMonth).length;
+  const totalPrevYear = headcountAsOf(cutoffPrevYear).length;
+  const crecMoM = pctChange(totalActual, totalPrevMonth);
+  const crecYoY = pctChange(totalActual, totalPrevYear);
+
+  const metaByArea = Object.fromEntries(latestHCByArea().map((r) => [r.area, Number(r.meta || 0)]));
+  const totalMeta = Object.values(metaByArea).reduce((a, b) => a + b, 0);
+  const cumplimiento = totalMeta ? Math.round((totalActual / totalMeta) * 100) : null;
+
+  document.getElementById('hc-stats').innerHTML = `
+    <div class="stat-card"><div class="sq"></div><div class="label">Headcount actual</div><div class="value">${totalActual}</div><div class="sub">activos a ${MESES[month]} ${year} (Estatus = Activo)</div></div>
+    <div class="stat-card"><div class="sq"></div><div class="label">Crecimiento vs mes anterior</div><div class="value" style="color:${growthColor(crecMoM)}">${growthSub(crecMoM)}</div><div class="sub">${totalPrevMonth} → ${totalActual}</div></div>
+    <div class="stat-card"><div class="sq"></div><div class="label">Crecimiento vs año anterior</div><div class="value" style="color:${growthColor(crecYoY)}">${growthSub(crecYoY)}</div><div class="sub">${totalPrevYear} → ${totalActual}</div></div>
+    <div class="stat-card"><div class="sq"></div><div class="label">Cumplimiento vs meta</div><div class="value" style="color:${cumplimiento === null ? 'inherit' : statusOf(cumplimiento) === 'ok' ? 'var(--verde)' : statusOf(cumplimiento) === 'warn' ? 'var(--amarillo)' : 'var(--rojo)'}">${cumplimiento !== null ? cumplimiento + '%' : '—'}</div><div class="sub">meta total ${totalMeta || '—'}</div></div>
+  `;
+
+  const countsByArea = countByArea(roster);
+  const areas = [...new Set([...Object.keys(countsByArea), ...Object.keys(metaByArea)])].sort();
+
   if (chartHC) chartHC.destroy();
-  if (latest.length) {
+  if (areas.length) {
     chartHC = new Chart(document.getElementById('chart-hc'), {
       type: 'bar',
       data: {
-        labels: latest.map((r) => r.area),
+        labels: areas,
         datasets: [
-          { label: 'Actual', data: latest.map((r) => r.headcount), backgroundColor: '#19199A', borderRadius: 5, maxBarThickness: 32 },
-          { label: 'Meta', data: latest.map((r) => r.meta || 0), backgroundColor: '#E8E7E7', borderRadius: 5, maxBarThickness: 32 },
+          { label: 'Actual', data: areas.map((a) => countsByArea[a] || 0), backgroundColor: '#19199A', borderRadius: 5, maxBarThickness: 32 },
+          { label: 'Meta', data: areas.map((a) => metaByArea[a] || 0), backgroundColor: '#E8E7E7', borderRadius: 5, maxBarThickness: 32 },
         ],
       },
       options: {
@@ -59,21 +122,23 @@ function renderHC() {
       },
     });
   }
-  const rows = [...appData.headcount].sort((a, b) => b.periodo.localeCompare(a.periodo) || a.area.localeCompare(b.area));
+
   const tbody = document.querySelector('#hc-table tbody');
-  if (!rows.length) {
+  if (!areas.length) {
     tbody.innerHTML = `<tr><td colspan="5" class="empty">Aún no hay datos de headcount para mostrar.</td></tr>`;
     return;
   }
-  tbody.innerHTML = rows
-    .map((r) => {
-      const pct = r.meta ? Math.round((r.headcount / r.meta) * 100) : null;
+  tbody.innerHTML = areas
+    .map((area) => {
+      const actual = countsByArea[area] || 0;
+      const meta = metaByArea[area] || 0;
+      const pct = meta ? Math.round((actual / meta) * 100) : null;
       const st = pct === null ? null : statusOf(pct);
       return `<tr>
-      <td><strong>${r.area}</strong></td>
-      <td>${r.periodo}</td>
-      <td>${r.meta || '—'}</td>
-      <td>${r.headcount}</td>
+      <td><strong>${area}</strong></td>
+      <td>${year}-${String(month + 1).padStart(2, '0')}</td>
+      <td>${meta || '—'}</td>
+      <td>${actual}</td>
       <td>${pct !== null ? `<span class="badge ${st}">${pct}%</span>` : '—'}</td>
     </tr>`;
     })
