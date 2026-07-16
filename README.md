@@ -7,6 +7,7 @@ Tracker de KPIs de negocio, clientes, equipo, organigrama y People Analytics par
 ```
 interius-kpi-tracker/
 ├── server.js              → servidor Express: sirve la app y la API /api/data
+├── sheets.js              → lee la pestaña "DB Empleados" del Google Sheet
 ├── index.html            → punto de entrada de la app
 ├── css/
 │   └── styles.css        → estilos (marca Interius)
@@ -14,7 +15,7 @@ interius-kpi-tracker/
 │   ├── app.js             → entry point: importa todo, gate de login y arranca la app
 │   ├── state.js           → estado compartido (appData) y su setter
 │   ├── calc.js             → cálculos puros (achievement, avgAchievement, ratings...)
-│   ├── data.js            → carga/persistencia (fetch a /data, localStorage)
+│   ├── data.js            → carga/persistencia (fetch a /api/data)
 │   ├── utils.js            → helpers de UI y fechas (toast, initials, antigüedad...)
 │   ├── auth.js              → login con Google, sesión, rol del usuario actual
 │   ├── permissions.js       → qué puede ver/editar cada rol
@@ -29,12 +30,10 @@ interius-kpi-tracker/
 │       └── people.js         → People Analytics (HC, bajas, rotación, antigüedad)
 └── data/                  → AQUÍ VIVEN LAS FUENTES DE DATOS
     ├── clientes.json      → tabla de clientes
-    ├── personas.json      → tabla de equipo (incluye a quién le reporta cada quien)
+    ├── personas.json      → SOLO control de acceso: [{ email, role }] de quien puede iniciar sesión
     ├── kpis.json          → tabla de KPIs de negocio por cliente
     ├── headcount.json     → tabla de headcount por área / período
-    ├── bajas.json         → tabla de bajas (voluntarias / involuntarias)
-    ├── empleados.json     → tabla de empleados para antigüedad y antigüedad en el puesto
-    ├── config.json        → configuración general (meta de rotación, Google Client ID)
+    ├── config.json        → configuración general (meta de rotación, Google Client ID, sheetId)
     └── store.json         → (generado, no versionado) snapshot actual de appData
 ```
 
@@ -43,14 +42,36 @@ interius-kpi-tracker/
 build, el navegador los resuelve directamente.
 
 Cada archivo `.json` dentro de `/data` (salvo `store.json`) funciona como una
-"tabla": es una lista de objetos con una estructura fija. Hoy están llenos con
-datos de ejemplo — edítalos directamente para reemplazarlos con tu información
-real, o mantenlos como base y haz los ajustes finos desde la propia app.
+"tabla": es una lista de objetos con una estructura fija. Edítalos directamente
+para ajustar clientes, KPIs o headcount, o hazlo desde la propia app.
 
-> Cuando quieras conectar una fuente de datos real (una base de datos, un API
-> externo, Google Sheets, etc.), el único lugar que tendrías que tocar es la
-> función `loadSourceTables()` en `server.js`: hoy lee estos JSON del disco,
-> pero podrías apuntarla a tu fuente real sin cambiar el resto de la app.
+### Equipo, antigüedad y bajas vienen de Google Sheets
+
+Estas tres tablas ya **no** viven en `/data` — se leen en vivo de la pestaña
+**"DB Empleados"** del Google Sheet configurado en `data/config.json`
+(`sheetId`), vía `sheets.js`. Cada vez que el servidor recompone los datos
+(primer arranque o "Restaurar datos de origen"), vuelve a leer esa pestaña.
+
+- El Sheet debe estar compartido como **"Cualquiera con el enlace puede
+  ver"** — el servidor lo lee sin iniciar sesión, por su export CSV público
+  (`.../export?format=csv`). Si lo vuelves a poner privado, la app deja de
+  poder leerlo.
+- Columnas que usa: `INTERIUS ID`, `Nombre Completo`, `Puesto Completo`,
+  `Reporta a:`, `Área`, `Fecha de Contratación`, `Estatus` (`Activo` /
+  `Inactivo`), `Tipo de Baja`, `Motivo de Baja`, `Fecha de Baja`, `Correo`.
+- Filas con `Nombre Completo` en blanco se ignoran. Filas `Activo` alimentan
+  Equipo/Organigrama y Antigüedad; filas `Inactivo` con `Fecha de Baja`
+  alimentan Bajas.
+- El Sheet no tiene fecha de cambio de puesto, así que "antigüedad en el
+  puesto" usa la misma fecha que "antigüedad" (fecha de contratación).
+- El Sheet **no** tiene el rol de acceso (`super_admin` / `admin` /
+  `usuario`) — eso sigue viviendo en `data/personas.json`, a propósito: no
+  quieres que cualquiera con el link del Sheet pueda otorgarse acceso de
+  administrador. Ver "Dar de alta o cambiar accesos" abajo.
+
+> Para apuntar a otra fuente de datos (otro Sheet, una base de datos, un API),
+> el lugar a tocar es `loadEmpleadosFromSheet()` en `sheets.js` — o
+> `loadSourceTables()` en `server.js` si también quieres mover clientes/KPIs.
 
 ## Cómo funciona la persistencia
 
@@ -96,15 +117,16 @@ npm run format  # Prettier sobre js/, css/ y *.html
 La app pide iniciar sesión con una cuenta de Google antes de mostrar cualquier
 vista. El rol de cada quien sale de `data/personas.json` (campos `email` y
 `role`); si el correo con el que alguien entra no aparece ahí (o no tiene
-`role`), se le niega el acceso.
+`role`), se le niega el acceso — sin importar si esa persona sí existe como
+`Activo` en el Sheet.
 
 Roles disponibles:
 
-| Rol | Ve | Edita |
-|---|---|---|
-| `super_admin` | Todo | Todo (clientes, equipo, KPIs) |
-| `admin` | Todo excepto People Analytics | Nada |
-| `usuario` | Solo los clientes/KPIs donde es responsable, y a sí mismo en Equipo/Organigrama | Nada |
+| Rol           | Ve                                                                              | Edita                         |
+| ------------- | ------------------------------------------------------------------------------- | ----------------------------- |
+| `super_admin` | Todo                                                                            | Todo (clientes, equipo, KPIs) |
+| `admin`       | Todo excepto People Analytics                                                   | Nada                          |
+| `usuario`     | Solo los clientes/KPIs donde es responsable, y a sí mismo en Equipo/Organigrama | Nada                          |
 
 ### Configurar tu Google OAuth Client ID
 
@@ -117,9 +139,15 @@ Roles disponibles:
 
 ### Dar de alta o cambiar accesos
 
-Edita `data/personas.json` y agrégale `email` (la cuenta de Google con la que
-esa persona inicia sesión) y `role` (`super_admin`, `admin` o `usuario`) a
-quien necesite entrar. Quien no tenga esos dos campos no puede iniciar sesión.
+Dos requisitos, en dos lugares distintos:
+
+1. La persona debe existir como fila `Activo` en la pestaña "DB Empleados"
+   del Sheet, con su `Correo` correcto.
+2. Agrega ese mismo correo a `data/personas.json` con su `role`
+   (`super_admin`, `admin` o `usuario`), ej. `{ "email": "ana@interius.com.mx", "role": "admin" }`.
+
+Quien esté en el Sheet pero no en `data/personas.json` (o viceversa) no
+puede iniciar sesión.
 
 ### ⚠️ Esto no es un perímetro de seguridad real
 
@@ -131,6 +159,10 @@ el rol — no para proteger información sensible de alguien con las
 herramientas de desarrollador abiertas. Si eso te importa (datos realmente
 confidenciales), `/api/data` necesita autenticación real (verificar el ID
 token en el servidor y aplicar permisos por rol ahí, no solo en el cliente).
+
+Lo mismo aplica al Google Sheet: al estar compartido como "cualquiera con el
+enlace puede ver", cualquiera con esa URL puede leer nombres, puestos, fechas
+de contratación y motivos de baja de todo el equipo, sin iniciar sesión.
 
 ## Módulos de la app
 

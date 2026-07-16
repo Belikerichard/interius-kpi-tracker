@@ -47,16 +47,16 @@ function findAuthorizedPersona(email) {
   return appData.personas.find((p) => p.email && p.email.toLowerCase() === email && p.role);
 }
 
-/* Si el correo no aparece en el appData ya cacheado en localStorage, puede
-   ser porque /data/personas.json se actualizó (nuevo acceso dado de alta)
-   después de que este navegador guardó su copia. Antes de negar el acceso,
-   se refresca personas.json desde el origen y se reintenta una vez. */
+/* Si el correo no aparece en el appData ya cacheado, puede ser porque se
+   dio de alta a alguien nuevo (en el Sheet o en data/personas.json) después
+   de que este navegador guardó su copia. Antes de negar el acceso, se
+   refresca personas desde el servidor y se reintenta una vez. */
 async function refreshPersonasFromSource() {
   try {
-    appData.personas = await fetch('data/personas.json').then((r) => r.json());
+    appData.personas = await fetch('/api/personas').then((r) => r.json());
     await persist();
   } catch {
-    /* sin conexión al origen: seguimos con lo que ya había en caché */
+    /* sin conexión al servidor: seguimos con lo que ya había en caché */
   }
 }
 

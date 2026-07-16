@@ -1,6 +1,0 @@
-[
-  {"id":"emp-001","nombre":"Ana Torres","area":"Cuentas","fechaIngreso":"2022-03-01","fechaPuesto":"2024-01-15"},
-  {"id":"emp-002","nombre":"Luis Herrera","area":"Medios","fechaIngreso":"2023-06-10","fechaPuesto":"2023-06-10"},
-  {"id":"emp-003","nombre":"Sofía Ramírez","area":"Creativo","fechaIngreso":"2021-09-20","fechaPuesto":"2022-05-01"},
-  {"id":"emp-004","nombre":"Mariana Cobos","area":"Dirección","fechaIngreso":"2019-01-07","fechaPuesto":"2021-01-07"}
-]

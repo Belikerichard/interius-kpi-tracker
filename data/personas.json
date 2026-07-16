@@ -1,6 +1,1 @@
-[
-  {"id":"per-mariana","name":"Mariana Cobos","rol":"Directora de Cuentas","reportsTo":null,"email":"ricardomunoz@interius.com.mx","role":"super_admin"},
-  {"id":"per-ana","name":"Ana Torres","rol":"Account Manager","reportsTo":"per-mariana","email":"ana.torres@example.com","role":"admin"},
-  {"id":"per-luis","name":"Luis Herrera","rol":"Media Buyer","reportsTo":"per-ana","email":"luis.herrera@example.com","role":"usuario"},
-  {"id":"per-sofia","name":"Sofía Ramírez","rol":"Content Strategist","reportsTo":"per-ana","email":"sofia.ramirez@example.com","role":"usuario"}
-]
+[{ "email": "ricardomunoz@interius.com.mx", "role": "super_admin" }]
