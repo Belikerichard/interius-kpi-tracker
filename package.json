@@ -6,9 +6,12 @@
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
-    "start": "npx serve . -l 3000",
+    "start": "node server.js",
     "lint": "eslint js",
     "format": "prettier --write \"js/**/*.js\" \"css/**/*.css\" \"*.html\""
+  },
+  "dependencies": {
+    "express": "^5.2.1"
   },
   "devDependencies": {
     "eslint": "^9.15.0",

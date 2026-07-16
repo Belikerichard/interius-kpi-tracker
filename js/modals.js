@@ -18,6 +18,16 @@ export function closeModal(id) {
 document.querySelectorAll('[data-close]').forEach((btn) => {
   btn.addEventListener('click', () => closeModal(btn.dataset.close));
 });
+document.querySelectorAll('.overlay').forEach((overlay) => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal(overlay.id);
+  });
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelector('.overlay.show');
+  if (open) closeModal(open.id);
+});
 
 /* ---- cliente ---- */
 document.getElementById('btn-add-cliente').addEventListener('click', () => {

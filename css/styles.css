@@ -15,6 +15,10 @@
 * {
   box-sizing: border-box;
 }
+:focus-visible {
+  outline: 2px solid var(--azul-brillante);
+  outline-offset: 2px;
+}
 body {
   margin: 0;
   font-family:
@@ -156,6 +160,17 @@ body {
 }
 .view.active {
   display: block;
+  animation: fadeIn 0.15s ease;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* --- cards / grid --- */
@@ -373,8 +388,11 @@ td {
   border-bottom: 1px solid #f4f4f8;
   vertical-align: middle;
 }
+tbody tr:nth-child(even) td {
+  background: #fbfbfd;
+}
 tr:hover td {
-  background: #fafafd;
+  background: #f2f2fb;
 }
 select,
 .filter-input {
@@ -540,6 +558,17 @@ input[type='number'] {
   max-width: 92vw;
   max-height: 88vh;
   overflow-y: auto;
+  animation: modalIn 0.15s ease;
+}
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 .modal h3 {
   margin: 0 0 16px;

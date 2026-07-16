@@ -6,6 +6,7 @@ Tracker de KPIs de negocio, clientes, equipo, organigrama y People Analytics par
 
 ```
 interius-kpi-tracker/
+├── server.js              → servidor Express: sirve la app y la API /api/data
 ├── index.html            → punto de entrada de la app
 ├── css/
 │   └── styles.css        → estilos (marca Interius)
@@ -33,56 +34,52 @@ interius-kpi-tracker/
     ├── headcount.json     → tabla de headcount por área / período
     ├── bajas.json         → tabla de bajas (voluntarias / involuntarias)
     ├── empleados.json     → tabla de empleados para antigüedad y antigüedad en el puesto
-    └── config.json        → configuración general (meta de rotación, Google Client ID)
+    ├── config.json        → configuración general (meta de rotación, Google Client ID)
+    └── store.json         → (generado, no versionado) snapshot actual de appData
 ```
 
 `js/app.js` se carga como `<script type="module">`, así que cada archivo de
 `js/` es un módulo ES nativo (`import`/`export`) — no hay bundler ni paso de
 build, el navegador los resuelve directamente.
 
-Cada archivo `.json` dentro de `/data` funciona como una "tabla": es una lista de
-objetos con una estructura fija. Hoy están llenos con datos de ejemplo — edítalos
-directamente para reemplazarlos con tu información real, o mantenlos como base y
-haz los ajustes finos desde la propia app.
+Cada archivo `.json` dentro de `/data` (salvo `store.json`) funciona como una
+"tabla": es una lista de objetos con una estructura fija. Hoy están llenos con
+datos de ejemplo — edítalos directamente para reemplazarlos con tu información
+real, o mantenlos como base y haz los ajustes finos desde la propia app.
 
-> Cuando quieras conectar una fuente de datos real (una base de datos, un API,
-> Google Sheets, etc.), el único lugar que tendrías que tocar es la función
-> `loadSourceTables()` en `js/data.js`: hoy hace `fetch()` a estos JSON, pero podrías
-> apuntarla a tu API sin cambiar el resto de la aplicación.
+> Cuando quieras conectar una fuente de datos real (una base de datos, un API
+> externo, Google Sheets, etc.), el único lugar que tendrías que tocar es la
+> función `loadSourceTables()` en `server.js`: hoy lee estos JSON del disco,
+> pero podrías apuntarla a tu fuente real sin cambiar el resto de la app.
 
 ## Cómo funciona la persistencia
 
-1. La primera vez que abres la app, carga los datos desde `/data/*.json`.
-2. A partir de ahí, cualquier cambio que hagas (actualizar un KPI, agregar un
-   cliente, mover a alguien en el organigrama, etc.) se guarda en el
-   `localStorage` de tu navegador — no se sobreescriben los archivos `.json`.
+La app corre sobre un servidor Node/Express (`server.js`) que expone una API
+(`/api/data`) y guarda el estado completo en `data/store.json`.
+
+1. La primera vez que arrancas el servidor, `GET /api/data` compone los datos
+   a partir de `/data/*.json` y los guarda en `data/store.json`.
+2. A partir de ahí, cualquier cambio que hagas en la app (actualizar un KPI,
+   agregar un cliente, mover a alguien en el organigrama, etc.) se manda por
+   `POST /api/data` y se guarda en `data/store.json` — no se sobreescriben las
+   tablas fuente originales.
 3. Si quieres regresar a los datos originales de `/data`, usa el link
-   **"Restaurar datos de origen"** al fondo del menú lateral.
+   **"Restaurar datos de origen"** al fondo del menú lateral (llama a
+   `POST /api/data/restore`).
+
+`data/store.json` es estado generado (como antes era el `localStorage` del
+navegador) — no está versionado en git.
 
 ## Cómo correrlo en VS Code
 
-Esta app usa `fetch()` para leer los archivos de `/data`, por lo que **no puedes
-abrir `index.html` directamente con doble clic** (los navegadores bloquean
-`fetch` sobre `file://`). Necesitas servirlo con un servidor local. Dos opciones:
-
-### Opción A — Extensión Live Server (más fácil)
-1. Instala la extensión **Live Server** de Ritwick Dey desde el marketplace de VS Code.
-2. Click derecho sobre `index.html` → **"Open with Live Server"**.
-
-### Opción B — Node / npx (sin instalar nada permanente)
 ```bash
-npx serve .
-```
-y abre la URL que te indique en consola (normalmente `http://localhost:3000`).
-
-También incluí un `package.json` con un script `npm start` que hace lo mismo:
-```bash
+npm install   # una sola vez
 npm start
 ```
 
-> Nota: al usar `<script type="module">`, los mismos navegadores que bloquean
-> `fetch` sobre `file://` también bloquean la carga de módulos ahí — otra
-> razón más para siempre servir el proyecto con un servidor local.
+y abre `http://localhost:3000`. Ya no funciona con Live Server ni con
+doble clic sobre `index.html`: la app necesita el servidor Express para leer
+y guardar datos vía `/api/data`.
 
 ## Calidad de código
 
@@ -126,13 +123,14 @@ quien necesite entrar. Quien no tenga esos dos campos no puede iniciar sesión.
 
 ### ⚠️ Esto no es un perímetro de seguridad real
 
-Este proyecto es HTML/CSS/JS estático sin backend: los archivos `/data/*.json`
-son públicos para cualquiera que los pida, y el ID token de Google se
-decodifica en el navegador sin verificar su firma. El login sirve para dar
-identidad y ocultar/filtrar la interfaz según el rol — no para proteger
-información sensible de alguien con las herramientas de desarrollador
-abiertas. Si eso te importa (datos realmente confidenciales), la data y la
-verificación del login necesitan vivir en un backend real.
+El servidor Express (`server.js`) sirve `/api/data` sin verificar quién hace
+la llamada: cualquiera con acceso a la URL puede leer o sobreescribir todo el
+estado, y el ID token de Google se decodifica en el navegador sin verificar su
+firma. El login sirve para dar identidad y ocultar/filtrar la interfaz según
+el rol — no para proteger información sensible de alguien con las
+herramientas de desarrollador abiertas. Si eso te importa (datos realmente
+confidenciales), `/api/data` necesita autenticación real (verificar el ID
+token en el servidor y aplicar permisos por rol ahí, no solo en el cliente).
 
 ## Módulos de la app
 
