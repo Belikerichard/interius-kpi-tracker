@@ -227,22 +227,18 @@
             <div class="filters-row" id="hc-filtro"></div>
             <div class="cards-row" id="hc-stats"></div>
             <div class="panel">
+              <h3>
+                <span class="bracket-mini">[</span> Crecimiento de HC <span class="bracket-mini">]</span>
+                <select id="hc-rango" style="margin-left: auto">
+                  <option value="6">Semestral</option>
+                  <option value="12">Anual</option>
+                </select>
+              </h3>
+              <canvas id="chart-hc-growth" height="200"></canvas>
+            </div>
+            <div class="panel">
               <h3><span class="bracket-mini">[</span> Headcount por área <span class="bracket-mini">]</span></h3>
               <canvas id="chart-hc" height="200"></canvas>
-            </div>
-            <div class="panel" style="padding: 0">
-              <table id="hc-table">
-                <thead>
-                  <tr>
-                    <th>Área</th>
-                    <th>Período</th>
-                    <th>Meta</th>
-                    <th>Actual</th>
-                    <th>Cumplimiento</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
             </div>
           </div>
 

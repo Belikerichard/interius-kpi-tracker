@@ -5,9 +5,11 @@ import { tenureYears, fmtYears, tenureBuckets } from '../utils.js';
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const today = new Date();
 let hcFiltro = { year: today.getFullYear(), month: today.getMonth() }; // month: 0-11
+let hcRango = 6; // meses a desglosar en el gráfico de crecimiento: 6 (semestral) o 12 (anual)
 
 let currentSubtab = 'hc';
 let chartHC = null,
+  chartHCGrowth = null,
   chartBajas = null,
   chartRotacion = null,
   chartAntiguedad = null,
@@ -32,6 +34,11 @@ export function renderPeopleView() {
 
 document.querySelectorAll('.subtab').forEach((t) => {
   t.addEventListener('click', () => switchSubtab(t.dataset.subtab));
+});
+
+document.getElementById('hc-rango').addEventListener('change', (e) => {
+  hcRango = Number(e.target.value);
+  renderHC();
 });
 
 /* ---- HC ---- */
@@ -95,9 +102,12 @@ function renderHC() {
   const totalMeta = Object.values(metaByArea).reduce((a, b) => a + b, 0);
   const cumplimiento = totalMeta ? Math.round((totalActual / totalMeta) * 100) : null;
 
+  const periodo = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const altas = [...appData.empleados, ...appData.bajas].filter((r) => (r.fechaIngreso || '').slice(0, 7) === periodo).length;
+
   const cumplColor = cumplimiento === null ? 'inherit' : statusOf(cumplimiento) === 'ok' ? 'var(--verde)' : statusOf(cumplimiento) === 'warn' ? 'var(--amarillo)' : 'var(--rojo)';
   document.getElementById('hc-stats').innerHTML = `
-    <div class="stat-card" style="grid-column:1/-1">
+    <div class="stat-card" style="grid-column:span 3">
       <div class="sq"></div>
       <div class="label">Headcount actual</div>
       <div class="value">${totalActual}</div>
@@ -108,7 +118,36 @@ function renderHC() {
         <div><div class="sub" style="margin:0">cumplimiento vs meta</div><strong style="color:${cumplColor}">${cumplimiento !== null ? cumplimiento + '%' : '—'}</strong></div>
       </div>
     </div>
+    <div class="stat-card"><div class="sq"></div><div class="label">Altas este mes</div><div class="value" style="color:var(--verde)">${altas}</div><div class="sub">nuevos ingresos en ${MESES[month]} ${year}</div></div>
   `;
+
+  const growthMonths = Array.from({ length: hcRango }, (_, i) => {
+    const d = new Date(year, month - (hcRango - 1 - i), 1);
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+  if (chartHCGrowth) chartHCGrowth.destroy();
+  chartHCGrowth = new Chart(document.getElementById('chart-hc-growth'), {
+    type: 'line',
+    data: {
+      labels: growthMonths.map((m) => `${MESES[m.month]} ${String(m.year).slice(2)}`),
+      datasets: [
+        {
+          label: 'Headcount',
+          data: growthMonths.map((m) => headcountAsOf(lastDayOfMonth(m.year, m.month)).length),
+          borderColor: '#19199A',
+          backgroundColor: 'rgba(25,25,154,0.08)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: '#19199A',
+        },
+      ],
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+    },
+  });
 
   const countsByArea = countByArea(roster);
   const areas = [...new Set([...Object.keys(countsByArea), ...Object.keys(metaByArea)])].sort();
@@ -130,27 +169,6 @@ function renderHC() {
       },
     });
   }
-
-  const tbody = document.querySelector('#hc-table tbody');
-  if (!areas.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">Aún no hay datos de headcount para mostrar.</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = areas
-    .map((area) => {
-      const actual = countsByArea[area] || 0;
-      const meta = metaByArea[area] || 0;
-      const pct = meta ? Math.round((actual / meta) * 100) : null;
-      const st = pct === null ? null : statusOf(pct);
-      return `<tr>
-      <td><strong>${area}</strong></td>
-      <td>${year}-${String(month + 1).padStart(2, '0')}</td>
-      <td>${meta || '—'}</td>
-      <td>${actual}</td>
-      <td>${pct !== null ? `<span class="badge ${st}">${pct}%</span>` : '—'}</td>
-    </tr>`;
-    })
-    .join('');
 }
 
 /* ---- BAJAS ---- */
