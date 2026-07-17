@@ -21,9 +21,9 @@ async function readJson(file) {
 }
 
 async function loadPersonasLive(config) {
-  const [{ personas, empleados, bajas }, access] = await Promise.all([loadEmpleadosFromSheet(config.sheetId), readJson('personas.json')]);
+  const [{ personas, empleados, bajas, dataQuality }, access] = await Promise.all([loadEmpleadosFromSheet(config.sheetId), readJson('personas.json')]);
   const roleByEmail = new Map(access.map((a) => [a.email.toLowerCase(), a.role]));
-  return { personas: personas.map((p) => ({ ...p, role: roleByEmail.get(p.email) })), empleados, bajas };
+  return { personas: personas.map((p) => ({ ...p, role: roleByEmail.get(p.email) })), empleados, bajas, dataQuality };
 }
 
 async function loadSourceTables() {
@@ -33,7 +33,7 @@ async function loadSourceTables() {
     readJson('headcount.json'),
     readJson('config.json'),
   ]);
-  const { personas, empleados, bajas } = await loadPersonasLive(config);
+  const { personas, empleados, bajas, dataQuality } = await loadPersonasLive(config);
   return {
     clientes,
     personas,
@@ -41,6 +41,7 @@ async function loadSourceTables() {
     headcount,
     bajas,
     empleados,
+    dataQuality,
     rotacionMeta: config.rotacionMeta,
     googleClientId: config.googleClientId,
   };

@@ -1,19 +1,28 @@
 import { appData } from '../state.js';
-import { achievement, statusOf, statusLabel, latestHCByArea, headcountAsOf, lastDayOfMonth, pctChange } from '../calc.js';
-import { tenureYears, fmtYears, tenureBuckets } from '../utils.js';
+import { tenureYears, fmtYears, tenureBuckets, PALETTE } from '../utils.js';
 
-const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-const today = new Date();
-let hcFiltro = { year: today.getFullYear(), month: today.getMonth() }; // month: 0-11
-let hcRango = 6; // meses a desglosar en el gráfico de crecimiento: 6 (semestral) o 12 (anual)
+let currentSubtab = 'estructura';
+let chartArea = null,
+  chartNivel = null,
+  chartPiramide = null,
+  chartSpanControl = null,
+  chartAntigArea = null,
+  chartAntigNivel = null,
+  chartAntigHist = null,
+  chartSexo = null,
+  chartSexoNivel = null,
+  chartEdadHist = null,
+  chartEdadNivel = null,
+  chartEdadAntiguedad = null,
+  chartAltasMes = null,
+  chartAltasArea = null,
+  chartCrecimientoAcumulado = null,
+  chartLideres = null;
 
-let currentSubtab = 'hc';
-let chartHC = null,
-  chartHCGrowth = null,
-  chartBajas = null,
-  chartRotacion = null,
-  chartAntiguedad = null,
-  chartAntiguedadPuesto = null;
+const NIVEL_ORDEN = ['Executive', 'Manager', 'Jr Manager', 'Sr Consultant', 'Consultant', 'Jr Consultant', 'Specialist', 'Analyst', 'Trainee', 'Sin definir'];
+const AREAS_ORDEN = ['SEO', 'Paid Media', 'Inbound', 'Estrategia/BI', 'Capital Humano', 'Diseño', 'Desarrollo', 'UX', 'Dirección/Otra'];
+const LIDERES = new Set(['Manager', 'Jr Manager', 'Executive']);
+const NIVELES_JR = new Set(['Specialist', 'Jr Consultant', 'Jr Manager']);
 
 export function switchSubtab(name) {
   currentSubtab = name;
@@ -21,11 +30,12 @@ export function switchSubtab(name) {
   document.querySelector(`.subtab[data-subtab="${name}"]`).classList.add('active');
   document.querySelectorAll('.subview').forEach((v) => v.classList.remove('active'));
   document.getElementById('subview-' + name).classList.add('active');
-  if (name === 'hc') renderHC();
-  if (name === 'bajas') renderBajas();
-  if (name === 'rotacion') renderRotacion();
+  if (name === 'estructura') renderEstructura();
   if (name === 'antiguedad') renderAntiguedad();
-  if (name === 'antiguedad-puesto') renderAntiguedadPuesto();
+  if (name === 'demografia') renderDemografia();
+  if (name === 'contrataciones') renderContrataciones();
+  if (name === 'calidad') renderCalidad();
+  if (name === 'cruces') renderCruces();
 }
 
 export function renderPeopleView() {
@@ -36,300 +46,302 @@ document.querySelectorAll('.subtab').forEach((t) => {
   t.addEventListener('click', () => switchSubtab(t.dataset.subtab));
 });
 
-document.getElementById('hc-rango').addEventListener('change', (e) => {
-  hcRango = Number(e.target.value);
-  renderHC();
-});
+/* ---- helpers compartidos ---- */
+function activos() {
+  return appData.empleados.map((e) => ({ ...e, nivel: e.nivelPuesto || 'Sin definir', antiguedad: tenureYears(e.fechaIngreso) }));
+}
 
-/* ---- HC ---- */
-function countByArea(roster) {
+function avg(nums) {
+  const vals = nums.filter((n) => n !== null && n !== undefined && !Number.isNaN(n));
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+}
+
+function groupBy(items, keyFn) {
   const map = {};
-  roster.forEach((r) => (map[r.area] = (map[r.area] || 0) + 1));
+  items.forEach((it) => {
+    const k = keyFn(it);
+    (map[k] ||= []).push(it);
+  });
   return map;
 }
 
-function growthSub(pct) {
-  if (pct === null) return 'sin dato del período anterior';
-  const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '—';
-  return `${arrow} ${Math.abs(pct).toFixed(1)}%`;
+function orderedKeys(present, order) {
+  return order.filter((k) => present.has(k));
 }
 
-function growthColor(pct) {
-  if (pct === null) return 'inherit';
-  return pct > 0 ? 'var(--verde)' : pct < 0 ? 'var(--rojo)' : 'inherit';
-}
-
-function renderHCFiltro() {
-  const years = new Set([today.getFullYear()]);
-  [...appData.empleados, ...appData.bajas].forEach((r) => {
-    if (r.fechaIngreso) years.add(Number(r.fechaIngreso.slice(0, 4)));
-  });
-  const yearOpts = [...years]
-    .sort((a, b) => b - a)
-    .map((y) => `<option value="${y}" ${y === hcFiltro.year ? 'selected' : ''}>${y}</option>`)
-    .join('');
-  const monthOpts = MESES.map((m, i) => `<option value="${i}" ${i === hcFiltro.month ? 'selected' : ''}>${m}</option>`).join('');
-  document.getElementById('hc-filtro').innerHTML = `
-    <select id="hc-mes">${monthOpts}</select>
-    <select id="hc-anio">${yearOpts}</select>
-  `;
-  document.getElementById('hc-mes').addEventListener('change', (e) => {
-    hcFiltro.month = Number(e.target.value);
-    renderHC();
-  });
-  document.getElementById('hc-anio').addEventListener('change', (e) => {
-    hcFiltro.year = Number(e.target.value);
-    renderHC();
-  });
-}
-
-function renderHC() {
-  renderHCFiltro();
-
-  const { year, month } = hcFiltro;
-  const cutoff = lastDayOfMonth(year, month);
-  const cutoffPrevMonth = lastDayOfMonth(month === 0 ? year - 1 : year, month === 0 ? 11 : month - 1);
-  const cutoffPrevYear = lastDayOfMonth(year - 1, month);
-
-  const roster = headcountAsOf(cutoff);
-  const totalActual = roster.length;
-  const totalPrevMonth = headcountAsOf(cutoffPrevMonth).length;
-  const totalPrevYear = headcountAsOf(cutoffPrevYear).length;
-  const crecMoM = pctChange(totalActual, totalPrevMonth);
-  const crecYoY = pctChange(totalActual, totalPrevYear);
-
-  const metaByArea = Object.fromEntries(latestHCByArea().map((r) => [r.area, Number(r.meta || 0)]));
-  const totalMeta = Object.values(metaByArea).reduce((a, b) => a + b, 0);
-  const cumplimiento = totalMeta ? Math.round((totalActual / totalMeta) * 100) : null;
-
-  const periodo = `${year}-${String(month + 1).padStart(2, '0')}`;
-  const altas = [...appData.empleados, ...appData.bajas].filter((r) => (r.fechaIngreso || '').slice(0, 7) === periodo).length;
-
-  const cumplColor = cumplimiento === null ? 'inherit' : statusOf(cumplimiento) === 'ok' ? 'var(--verde)' : statusOf(cumplimiento) === 'warn' ? 'var(--amarillo)' : 'var(--rojo)';
-  document.getElementById('hc-stats').innerHTML = `
-    <div class="stat-card" style="grid-column:span 3">
-      <div class="sq"></div>
-      <div class="label">Headcount actual</div>
-      <div class="value">${totalActual}</div>
-      <div class="sub">activos a ${MESES[month]} ${year} (Estatus = Activo) · meta total ${totalMeta || '—'}</div>
-      <div style="display:flex;gap:28px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid #eeeef4">
-        <div><div class="sub" style="margin:0">vs mes anterior</div><strong style="color:${growthColor(crecMoM)}">${growthSub(crecMoM)}</strong> <span class="sub" style="margin:0">(${totalPrevMonth} → ${totalActual})</span></div>
-        <div><div class="sub" style="margin:0">vs año anterior</div><strong style="color:${growthColor(crecYoY)}">${growthSub(crecYoY)}</strong> <span class="sub" style="margin:0">(${totalPrevYear} → ${totalActual})</span></div>
-        <div><div class="sub" style="margin:0">cumplimiento vs meta</div><strong style="color:${cumplColor}">${cumplimiento !== null ? cumplimiento + '%' : '—'}</strong></div>
-      </div>
-    </div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Altas este mes</div><div class="value" style="color:var(--verde)">${altas}</div><div class="sub">nuevos ingresos en ${MESES[month]} ${year}</div></div>
+/* ---- 1. ESTRUCTURA ORGANIZACIONAL ---- */
+function renderEstructura() {
+  const emp = activos();
+  document.getElementById('estructura-stats').innerHTML = `
+    <div class="stat-card" style="grid-column:1/-1"><div class="sq"></div><div class="label">Headcount total activo</div><div class="value">${emp.length}</div><div class="sub">colaboradores con Estatus = Activo</div></div>
   `;
 
-  const growthMonths = Array.from({ length: hcRango }, (_, i) => {
-    const d = new Date(year, month - (hcRango - 1 - i), 1);
-    return { year: d.getFullYear(), month: d.getMonth() };
+  const byArea = groupBy(emp, (e) => e.area);
+  const areas = orderedKeys(new Set(Object.keys(byArea)), AREAS_ORDEN);
+  if (chartArea) chartArea.destroy();
+  chartArea = new Chart(document.getElementById('chart-area'), {
+    type: 'bar',
+    data: { labels: areas, datasets: [{ data: areas.map((a) => byArea[a].length), backgroundColor: '#19199A', borderRadius: 5, maxBarThickness: 40 }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
   });
-  if (chartHCGrowth) chartHCGrowth.destroy();
-  chartHCGrowth = new Chart(document.getElementById('chart-hc-growth'), {
-    type: 'line',
+
+  const byNivel = groupBy(emp, (e) => e.nivel);
+  const niveles = orderedKeys(new Set(Object.keys(byNivel)), NIVEL_ORDEN);
+  if (chartNivel) chartNivel.destroy();
+  chartNivel = new Chart(document.getElementById('chart-nivel'), {
+    type: 'bar',
+    data: { labels: niveles, datasets: [{ data: niveles.map((n) => byNivel[n].length), backgroundColor: '#4C4DF6', borderRadius: 5, maxBarThickness: 40 }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+  });
+
+  if (chartPiramide) chartPiramide.destroy();
+  chartPiramide = new Chart(document.getElementById('chart-piramide'), {
+    type: 'bar',
+    data: { labels: niveles, datasets: [{ data: niveles.map((n) => Math.round((byNivel[n].length / emp.length) * 1000) / 10), backgroundColor: '#EE7D38', borderRadius: 5 }] },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.x}%` } } },
+      scales: { x: { beginAtZero: true, ticks: { callback: (v) => v + '%' } } },
+    },
+  });
+
+  const byId = Object.fromEntries(emp.map((e) => [e.id, e]));
+  const reportCounts = {};
+  emp.forEach((e) => {
+    if (e.reportsTo) reportCounts[e.reportsTo] = (reportCounts[e.reportsTo] || 0) + 1;
+  });
+  const managers = Object.entries(reportCounts)
+    .map(([id, count]) => ({ id, nombre: byId[id]?.nombre || id, count }))
+    .sort((a, b) => b.count - a.count);
+  const top15 = managers.slice(0, 15);
+
+  if (chartSpanControl) chartSpanControl.destroy();
+  chartSpanControl = new Chart(document.getElementById('chart-span-control'), {
+    type: 'bar',
+    data: { labels: top15.map((m) => m.nombre), datasets: [{ data: top15.map((m) => m.count), backgroundColor: '#1E9E6B', borderRadius: 5 }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+  });
+
+  const tbody = document.querySelector('#span-control-table tbody');
+  tbody.innerHTML = managers.length
+    ? managers.map((m) => `<tr><td><strong>${m.nombre}</strong></td><td>${m.count}</td></tr>`).join('')
+    : `<tr><td colspan="2" class="empty">Nadie tiene reportes directos registrados.</td></tr>`;
+}
+
+/* ---- 2. ANTIGÜEDAD ---- */
+function renderAntiguedad() {
+  const emp = activos().filter((e) => e.antiguedad !== null);
+  const avgAntig = avg(emp.map((e) => e.antiguedad));
+  const menos6m = emp.filter((e) => e.antiguedad < 0.5).length;
+  document.getElementById('antiguedad-stats').innerHTML = `
+    <div class="stat-card"><div class="sq"></div><div class="label">Antigüedad promedio</div><div class="value">${fmtYears(avgAntig)}</div><div class="sub">${emp.length} colaboradores con fecha de ingreso</div></div>
+    <div class="stat-card"><div class="sq"></div><div class="label">Menos de 6 meses</div><div class="value" style="color:var(--amarillo)">${menos6m}</div><div class="sub">${emp.length ? Math.round((menos6m / emp.length) * 100) : 0}% de la plantilla</div></div>
+  `;
+
+  const byArea = groupBy(emp, (e) => e.area);
+  const areas = orderedKeys(new Set(Object.keys(byArea)), AREAS_ORDEN);
+  if (chartAntigArea) chartAntigArea.destroy();
+  chartAntigArea = new Chart(document.getElementById('chart-antig-area'), {
+    type: 'bar',
+    data: { labels: areas, datasets: [{ data: areas.map((a) => Number(avg(byArea[a].map((e) => e.antiguedad)).toFixed(1))), backgroundColor: '#19199A', borderRadius: 5 }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+  });
+
+  const byNivel = groupBy(emp, (e) => e.nivel);
+  const niveles = orderedKeys(new Set(Object.keys(byNivel)), NIVEL_ORDEN);
+  if (chartAntigNivel) chartAntigNivel.destroy();
+  chartAntigNivel = new Chart(document.getElementById('chart-antig-nivel'), {
+    type: 'bar',
+    data: { labels: niveles, datasets: [{ data: niveles.map((n) => Number(avg(byNivel[n].map((e) => e.antiguedad)).toFixed(1))), backgroundColor: '#4C4DF6', borderRadius: 5 }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+  });
+
+  const buckets = tenureBuckets(emp.map((e) => e.antiguedad));
+  if (chartAntigHist) chartAntigHist.destroy();
+  chartAntigHist = new Chart(document.getElementById('chart-antig-hist'), {
+    type: 'bar',
+    data: { labels: Object.keys(buckets), datasets: [{ data: Object.values(buckets), backgroundColor: '#EE7D38', borderRadius: 5, maxBarThickness: 60 }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+  });
+}
+
+/* ---- 3. DEMOGRAFÍA ---- */
+function renderDemografia() {
+  const emp = activos();
+
+  const bySexo = groupBy(emp, (e) => e.sexo || 'Sin dato');
+  const sexos = Object.keys(bySexo);
+  if (chartSexo) chartSexo.destroy();
+  chartSexo = new Chart(document.getElementById('chart-sexo'), {
+    type: 'doughnut',
+    data: { labels: sexos, datasets: [{ data: sexos.map((s) => bySexo[s].length), backgroundColor: PALETTE }] },
+    options: { plugins: { legend: { position: 'bottom' } } },
+  });
+
+  const byNivel = groupBy(emp, (e) => e.nivel);
+  const niveles = orderedKeys(new Set(Object.keys(byNivel)), NIVEL_ORDEN);
+  if (chartSexoNivel) chartSexoNivel.destroy();
+  chartSexoNivel = new Chart(document.getElementById('chart-sexo-nivel'), {
+    type: 'bar',
     data: {
-      labels: growthMonths.map((m) => `${MESES[m.month]} ${String(m.year).slice(2)}`),
+      labels: niveles,
       datasets: [
-        {
-          label: 'Headcount',
-          data: growthMonths.map((m) => headcountAsOf(lastDayOfMonth(m.year, m.month)).length),
-          borderColor: '#19199A',
-          backgroundColor: 'rgba(25,25,154,0.08)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 3,
-          pointBackgroundColor: '#19199A',
-        },
+        { label: 'Hombre', data: niveles.map((n) => byNivel[n].filter((e) => e.sexo === 'Hombre').length), backgroundColor: '#19199A', borderRadius: 4 },
+        { label: 'Mujer', data: niveles.map((n) => byNivel[n].filter((e) => e.sexo === 'Mujer').length), backgroundColor: '#EE7D38', borderRadius: 4 },
       ],
     },
+    options: { plugins: { legend: { display: true, position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } },
+  });
+
+  const conEdad = emp.filter((e) => e.edad !== null);
+  const edadBuckets = { '<25': 0, '25-30': 0, '30-35': 0, '35+': 0 };
+  conEdad.forEach((e) => {
+    if (e.edad < 25) edadBuckets['<25']++;
+    else if (e.edad < 30) edadBuckets['25-30']++;
+    else if (e.edad < 35) edadBuckets['30-35']++;
+    else edadBuckets['35+']++;
+  });
+  if (chartEdadHist) chartEdadHist.destroy();
+  chartEdadHist = new Chart(document.getElementById('chart-edad-hist'), {
+    type: 'bar',
+    data: { labels: Object.keys(edadBuckets), datasets: [{ data: Object.values(edadBuckets), backgroundColor: '#1E9E6B', borderRadius: 5, maxBarThickness: 60 }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+  });
+
+  const byNivelEdad = groupBy(conEdad, (e) => e.nivel);
+  const nivelesEdad = orderedKeys(new Set(Object.keys(byNivelEdad)), NIVEL_ORDEN);
+  if (chartEdadNivel) chartEdadNivel.destroy();
+  chartEdadNivel = new Chart(document.getElementById('chart-edad-nivel'), {
+    type: 'bar',
+    data: { labels: nivelesEdad, datasets: [{ data: nivelesEdad.map((n) => Number(avg(byNivelEdad[n].map((e) => e.edad)).toFixed(1))), backgroundColor: '#4C4DF6', borderRadius: 5 }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+  });
+
+  const nivelesScatter = orderedKeys(new Set(conEdad.map((e) => e.nivel)), NIVEL_ORDEN);
+  if (chartEdadAntiguedad) chartEdadAntiguedad.destroy();
+  chartEdadAntiguedad = new Chart(document.getElementById('chart-edad-antiguedad'), {
+    type: 'scatter',
+    data: {
+      datasets: nivelesScatter.map((n, i) => ({
+        label: n,
+        data: conEdad
+          .filter((e) => e.nivel === n && e.antiguedad !== null)
+          .map((e) => ({ x: e.edad, y: Number(e.antiguedad.toFixed(1)) })),
+        backgroundColor: PALETTE[i % PALETTE.length],
+      })),
+    },
     options: {
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+      plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } },
+      scales: { x: { title: { display: true, text: 'Edad' } }, y: { title: { display: true, text: 'Antigüedad (años)' }, beginAtZero: true } },
     },
   });
-
-  const countsByArea = countByArea(roster);
-  const areas = [...new Set([...Object.keys(countsByArea), ...Object.keys(metaByArea)])].sort();
-
-  if (chartHC) chartHC.destroy();
-  if (areas.length) {
-    chartHC = new Chart(document.getElementById('chart-hc'), {
-      type: 'bar',
-      data: {
-        labels: areas,
-        datasets: [
-          { label: 'Actual', data: areas.map((a) => countsByArea[a] || 0), backgroundColor: '#19199A', borderRadius: 5, maxBarThickness: 32 },
-          { label: 'Meta', data: areas.map((a) => metaByArea[a] || 0), backgroundColor: '#E8E7E7', borderRadius: 5, maxBarThickness: 32 },
-        ],
-      },
-      options: {
-        plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
-        scales: { y: { beginAtZero: true } },
-      },
-    });
-  }
 }
 
-/* ---- BAJAS ---- */
-function renderBajas() {
-  const bajas = appData.bajas;
+/* ---- 4. RITMO DE CONTRATACIÓN ---- */
+function renderContrataciones() {
+  const emp = activos().filter((e) => e.fechaIngreso);
   const now = new Date();
-  const esteMes = bajas.filter((b) => {
-    const d = new Date(b.fecha + 'T00:00:00');
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-  }).length;
-  const voluntarias = bajas.filter((b) => b.tipo === 'Voluntaria').length;
-  const involuntarias = bajas.filter((b) => b.tipo === 'Involuntaria').length;
-  document.getElementById('bajas-stats').innerHTML = `
-    <div class="stat-card"><div class="sq"></div><div class="label">Bajas totales</div><div class="value">${bajas.length}</div><div class="sub">histórico registrado</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Bajas este mes</div><div class="value">${esteMes}</div><div class="sub">mes en curso</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Voluntarias</div><div class="value" style="color:var(--amarillo)">${voluntarias}</div><div class="sub">por decisión del colaborador</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Involuntarias</div><div class="value" style="color:var(--rojo)">${involuntarias}</div><div class="sub">por decisión de la empresa</div></div>
-  `;
-  const areas = [...new Set(bajas.map((b) => b.area))];
-  const areaData = areas.map((a) => bajas.filter((b) => b.area === a).length);
-  if (chartBajas) chartBajas.destroy();
-  if (areas.length) {
-    chartBajas = new Chart(document.getElementById('chart-bajas'), {
-      type: 'bar',
-      data: { labels: areas, datasets: [{ data: areaData, backgroundColor: '#EE7D38', borderRadius: 5, maxBarThickness: 36 }] },
-      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
-    });
-  }
-  const rows = [...bajas].sort((a, b) => b.fecha.localeCompare(a.fecha));
-  const tbody = document.querySelector('#bajas-table tbody');
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">Aún no hay bajas registradas.</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = rows
-    .map(
-      (b) => `<tr>
-    <td><strong>${b.empleado}</strong></td>
-    <td>${b.area}</td>
-    <td>${b.fecha}</td>
-    <td><span class="badge ${b.tipo === 'Voluntaria' ? 'warn' : 'bad'}">${b.tipo}</span></td>
-    <td>${b.motivo || '—'}</td>
-  </tr>`,
-    )
-    .join('');
-}
 
-/* ---- ROTACIÓN ---- */
-function renderRotacion() {
-  const now = new Date();
-  const hace12m = new Date();
-  hace12m.setFullYear(hace12m.getFullYear() - 1);
-  const bajas12m = appData.bajas.filter((b) => new Date(b.fecha + 'T00:00:00') >= hace12m);
-  const hcActual = latestHCByArea().reduce((a, r) => a + Number(r.headcount || 0), 0);
-  const rotacion = hcActual ? (bajas12m.length / hcActual) * 100 : 0;
-  const meta = appData.rotacionMeta;
-  const fakeKpi = { meta, actual: rotacion, direccion: 'down' };
-  const pct = achievement(fakeKpi);
-  const st = statusOf(pct);
-  document.getElementById('rotacion-stats').innerHTML = `
-    <div class="stat-card"><div class="sq"></div><div class="label">Rotación anualizada</div><div class="value">${rotacion.toFixed(1)}%</div><div class="sub">últimos 12 meses</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Meta anual</div><div class="value">${meta}%</div><div class="sub">menor es mejor</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Estado</div><div class="value" style="font-size:18px;margin-top:10px;"><span class="badge ${st}">${statusLabel(st)}</span></div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Bajas consideradas</div><div class="value">${bajas12m.length}</div><div class="sub">vs headcount actual (${hcActual})</div></div>
-  `;
   const months = [];
-  for (let i = 11; i >= 0; i--) {
+  for (let i = 17; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push({ label: d.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' }), year: d.getFullYear(), month: d.getMonth() });
+    months.push({ label: d.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' }), key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` });
   }
-  const data = months.map(
-    (m) =>
-      appData.bajas.filter((b) => {
-        const d = new Date(b.fecha + 'T00:00:00');
-        return d.getFullYear() === m.year && d.getMonth() === m.month;
-      }).length,
-  );
-  if (chartRotacion) chartRotacion.destroy();
-  chartRotacion = new Chart(document.getElementById('chart-rotacion'), {
-    type: 'bar',
-    data: { labels: months.map((m) => m.label), datasets: [{ data, backgroundColor: '#4C4DF6', borderRadius: 5, maxBarThickness: 26 }] },
+  const altasPorMes = months.map((m) => emp.filter((e) => e.fechaIngreso.slice(0, 7) === m.key).length);
+  if (chartAltasMes) chartAltasMes.destroy();
+  chartAltasMes = new Chart(document.getElementById('chart-altas-mes'), {
+    type: 'line',
+    data: { labels: months.map((m) => m.label), datasets: [{ data: altasPorMes, borderColor: '#19199A', backgroundColor: 'rgba(25,25,154,0.08)', fill: true, tension: 0.3, pointRadius: 3 }] },
     options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+  });
+
+  const desde = months[0].key + '-01';
+  const enVentana = emp.filter((e) => e.fechaIngreso >= desde);
+  const byArea = groupBy(enVentana, (e) => e.area);
+  const areas = orderedKeys(new Set(Object.keys(byArea)), AREAS_ORDEN);
+  if (chartAltasArea) chartAltasArea.destroy();
+  chartAltasArea = new Chart(document.getElementById('chart-altas-area'), {
+    type: 'bar',
+    data: { labels: areas, datasets: [{ data: areas.map((a) => byArea[a].length), backgroundColor: '#EE7D38', borderRadius: 5 }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+  });
+
+  const ordenados = [...emp].sort((a, b) => a.fechaIngreso.localeCompare(b.fechaIngreso));
+  const cumMonths = [];
+  if (ordenados.length) {
+    const [y0, m0] = ordenados[0].fechaIngreso.slice(0, 7).split('-').map(Number);
+    let y = y0,
+      m = m0 - 1;
+    while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth())) {
+      cumMonths.push({ label: new Date(y, m, 1).toLocaleDateString('es-MX', { month: 'short', year: '2-digit' }), key: `${y}-${String(m + 1).padStart(2, '0')}` });
+      m++;
+      if (m > 11) {
+        m = 0;
+        y++;
+      }
+    }
+  }
+  const acumulado = cumMonths.map((mo) => ordenados.filter((e) => e.fechaIngreso.slice(0, 7) <= mo.key).length);
+  if (chartCrecimientoAcumulado) chartCrecimientoAcumulado.destroy();
+  chartCrecimientoAcumulado = new Chart(document.getElementById('chart-crecimiento-acumulado'), {
+    type: 'line',
+    data: { labels: cumMonths.map((m) => m.label), datasets: [{ data: acumulado, borderColor: '#1E9E6B', backgroundColor: 'rgba(30,158,107,0.08)', fill: true, tension: 0.2, pointRadius: 0 }] },
+    options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 12 } }, y: { beginAtZero: true } } },
   });
 }
 
-/* ---- ANTIGÜEDAD ---- */
-function renderAntiguedad() {
-  const emps = appData.empleados.filter((e) => e.fechaIngreso);
-  const years = emps.map((e) => tenureYears(e.fechaIngreso));
-  const promedio = years.length ? years.reduce((a, b) => a + b, 0) / years.length : 0;
-  const menor1 = years.filter((y) => y < 1).length;
-  const mayor5 = years.filter((y) => y >= 5).length;
-  document.getElementById('antiguedad-stats').innerHTML = `
-    <div class="stat-card"><div class="sq"></div><div class="label">Antigüedad promedio</div><div class="value">${fmtYears(promedio)}</div><div class="sub">${emps.length} empleados registrados</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Menos de 1 año</div><div class="value" style="color:var(--amarillo)">${menor1}</div><div class="sub">posible riesgo de fuga temprana</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">5 años o más</div><div class="value" style="color:var(--verde)">${mayor5}</div><div class="sub">colaboradores consolidados</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Total registrados</div><div class="value">${emps.length}</div><div class="sub">con fecha de ingreso</div></div>
+/* ---- 5. CALIDAD DE DATOS ---- */
+function renderCalidad() {
+  const emp = activos();
+  const dq = appData.dataQuality || { excluidos: 0, incompletos: [] };
+  document.getElementById('calidad-nota').textContent =
+    `${dq.excluidos} registro(s) con Estatus = Activo se excluyeron del análisis por venir sin Nombre Completo (filas de plantilla vacías del Sheet).`;
+
+  const pct = emp.length ? Math.round((dq.incompletos.length / emp.length) * 100) : 0;
+  document.getElementById('calidad-stats').innerHTML = `
+    <div class="stat-card"><div class="sq"></div><div class="label">Registros incompletos</div><div class="value" style="color:${pct ? 'var(--amarillo)' : 'var(--verde)'}">${dq.incompletos.length}</div><div class="sub">${pct}% de la plantilla activa</div></div>
+    <div class="stat-card"><div class="sq"></div><div class="label">Registros excluidos</div><div class="value">${dq.excluidos}</div><div class="sub">sin Nombre Completo en el Sheet</div></div>
   `;
-  const buckets = tenureBuckets(years);
-  if (chartAntiguedad) chartAntiguedad.destroy();
-  chartAntiguedad = new Chart(document.getElementById('chart-antiguedad'), {
-    type: 'bar',
-    data: {
-      labels: Object.keys(buckets),
-      datasets: [{ data: Object.values(buckets), backgroundColor: '#19199A', borderRadius: 5, maxBarThickness: 40 }],
-    },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
-  });
-  const tbody = document.querySelector('#antiguedad-table tbody');
-  if (!appData.empleados.length) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty">Aún no hay empleados registrados.</td></tr>`;
-    return;
-  }
-  const rows = [...appData.empleados].sort((a, b) => (a.fechaIngreso || '').localeCompare(b.fechaIngreso || ''));
-  tbody.innerHTML = rows
-    .map(
-      (e) => `<tr>
-    <td><strong>${e.nombre}</strong></td>
-    <td>${e.area || '—'}</td>
-    <td>${e.fechaIngreso || '—'}</td>
-    <td>${fmtYears(tenureYears(e.fechaIngreso))}</td>
-  </tr>`,
-    )
-    .join('');
+
+  const tbody = document.querySelector('#calidad-table tbody');
+  tbody.innerHTML = dq.incompletos.length
+    ? dq.incompletos.map((r) => `<tr><td><strong>${r.nombre || r.id}</strong></td><td>${r.campos.join(', ')}</td></tr>`).join('')
+    : `<tr><td colspan="2" class="empty">Sin registros con datos incompletos.</td></tr>`;
 }
 
-/* ---- ANTIGÜEDAD EN EL PUESTO ---- */
-function renderAntiguedadPuesto() {
-  const emps = appData.empleados.filter((e) => e.fechaPuesto);
-  const years = emps.map((e) => tenureYears(e.fechaPuesto));
-  const promedio = years.length ? years.reduce((a, b) => a + b, 0) / years.length : 0;
-  const estancados = years.filter((y) => y >= 3).length;
-  document.getElementById('antiguedad-puesto-stats').innerHTML = `
-    <div class="stat-card"><div class="sq"></div><div class="label">Antigüedad promedio en puesto</div><div class="value">${fmtYears(promedio)}</div><div class="sub">${emps.length} empleados registrados</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">3+ años en el mismo puesto</div><div class="value" style="color:var(--amarillo)">${estancados}</div><div class="sub">candidatos a revisar plan de carrera</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Total registrados</div><div class="value">${emps.length}</div><div class="sub">con fecha en el puesto</div></div>
-  `;
-  const buckets = tenureBuckets(years);
-  if (chartAntiguedadPuesto) chartAntiguedadPuesto.destroy();
-  chartAntiguedadPuesto = new Chart(document.getElementById('chart-antiguedad-puesto'), {
+/* ---- 6. CRUCES ESTRATÉGICOS ---- */
+function renderCruces() {
+  const emp = activos();
+  const lideres = emp.filter((e) => LIDERES.has(e.nivel)).length;
+  const resto = emp.length - lideres;
+  if (chartLideres) chartLideres.destroy();
+  chartLideres = new Chart(document.getElementById('chart-lideres'), {
     type: 'bar',
-    data: {
-      labels: Object.keys(buckets),
-      datasets: [{ data: Object.values(buckets), backgroundColor: '#EE7D38', borderRadius: 5, maxBarThickness: 40 }],
-    },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+    data: { labels: ['Líderes (Manager/Jr Manager/Executive)', 'Colaboradores'], datasets: [{ data: [lideres, resto], backgroundColor: ['#19199A', '#E8E7E7'], borderRadius: 5 }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } },
   });
-  const tbody = document.querySelector('#antiguedad-puesto-table tbody');
-  if (!appData.empleados.length) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty">Aún no hay empleados registrados.</td></tr>`;
-    return;
-  }
-  const rows = [...appData.empleados].sort((a, b) => (a.fechaPuesto || '').localeCompare(b.fechaPuesto || ''));
-  tbody.innerHTML = rows
-    .map(
-      (e) => `<tr>
-    <td><strong>${e.nombre}</strong></td>
-    <td>${e.area || '—'}</td>
-    <td>${e.fechaPuesto || '—'}</td>
-    <td>${fmtYears(tenureYears(e.fechaPuesto))}</td>
-  </tr>`,
-    )
-    .join('');
+
+  const byId = Object.fromEntries(emp.map((e) => [e.id, e]));
+  const reportsByManager = {};
+  emp.forEach((e) => {
+    if (e.reportsTo) (reportsByManager[e.reportsTo] ||= []).push(e);
+  });
+  const sucesionRiesgo = Object.entries(reportsByManager)
+    .filter(([managerId]) => LIDERES.has(byId[managerId]?.nivel))
+    .filter(([, reports]) => !reports.some((r) => r.nivel === 'Sr Consultant' || r.nivel === 'Consultant'))
+    .map(([managerId]) => byId[managerId])
+    .filter(Boolean);
+
+  document.getElementById('sucesion-alert').innerHTML = sucesionRiesgo.length
+    ? sucesionRiesgo
+        .map((m) => `<div class="kpi-list-item"><div><div class="name">${m.nombre}</div><div class="meta">${m.area} · ${m.nivel}</div></div><span class="badge warn">Sin sucesor claro</span></div>`)
+        .join('')
+    : `<div class="empty">Todos los managers tienen un Sr Consultant/Consultant en su equipo.</div>`;
+
+  const estancados = emp.filter((e) => NIVELES_JR.has(e.nivel) && e.antiguedad !== null && e.antiguedad >= 2);
+  document.getElementById('estancamiento-alert').innerHTML = estancados.length
+    ? estancados
+        .map((e) => `<div class="kpi-list-item"><div><div class="name">${e.nombre}</div><div class="meta">${e.area} · ${e.nivel}</div></div><span class="badge warn">${fmtYears(e.antiguedad)}</span></div>`)
+        .join('')
+    : `<div class="empty">Nadie con 2+ años en Specialist/Jr detectado.</div>`;
 }

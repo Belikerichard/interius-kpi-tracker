@@ -8,6 +8,7 @@ export let appData = {
   headcount: [],
   bajas: [],
   empleados: [],
+  dataQuality: { excluidos: 0, incompletos: [] },
   rotacionMeta: 15,
   googleClientId: '',
 };

@@ -71,31 +71,93 @@ function normalizeName(name) {
   return name.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
 }
 
+function collapseSpaces(s) {
+  return (s || '').replace(/\s+/g, ' ').trim();
+}
+
+/* El Sheet trae typos ocasionales en "Puesto Completo" que rompen cualquier
+   agrupación/derivación por puesto. Diccionario chico, extensible. */
+const PUESTO_FIXES = {
+  'Inbound Marketing Specialit': 'Inbound Marketing Specialist',
+  'Full Stack Debeloper Trainee': 'Full Stack Developer Trainee',
+};
+
+function correctPuesto(puesto) {
+  const clean = collapseSpaces(puesto);
+  return PUESTO_FIXES[clean] || clean;
+}
+
+/* El Sheet no tiene columna de Área: se deriva del prefijo del puesto ya
+   corregido. Cualquier puesto que no matchee (ej. "Admin & Ops Executive",
+   o vacío) cae en el catch-all "Dirección/Otra". */
+const AREA_RULES = [
+  [/^SEO/, 'SEO'],
+  [/^(Paid Media|Social Media)/, 'Paid Media'],
+  [/^Inbound Marketing/, 'Inbound'],
+  [/^(Digital Strategy|Strategic Performance & Business Intelligence|Data & AI Specialist|Martech Consultant|Digital Performance and Strategic Analyst)/, 'Estrategia/BI'],
+  [/^(HR Executive|Office & HR Jr Manager|People Development Executive)/, 'Capital Humano'],
+  [/^Graphic Designer/, 'Diseño'],
+  [/^(Full Stack Developer|Web Developer)/, 'Desarrollo'],
+  [/^UX/, 'UX'],
+];
+
+function deriveArea(puestoCorregido) {
+  const rule = AREA_RULES.find(([re]) => re.test(puestoCorregido));
+  return rule ? rule[1] : 'Dirección/Otra';
+}
+
+const NIVEL_INDEFINIDO = new Set(['', 'Por Definir']);
+
 export async function loadEmpleadosFromSheet(sheetId) {
   const rows = await fetchSheetTab(sheetId, 'DB Empleados');
   const clean = rows.filter((r) => r['Nombre Completo']); // descarta filas en blanco/de relleno
+  const excluidos = rows.filter((r) => !r['Nombre Completo'] && r['Estatus'] === 'Activo').length;
   const nameToId = new Map(clean.map((r) => [normalizeName(r['Nombre Completo']), r['INTERIUS ID']]));
 
   const personas = [];
   const empleados = [];
   const bajas = [];
+  const incompletos = [];
 
   for (const r of clean) {
     const id = r['INTERIUS ID'];
-    const nombre = r['Nombre Completo'];
-    const area = r['Área'] || r['Area'] || 'Sin área';
+    const nombre = collapseSpaces(r['Nombre Completo']);
+    const puesto = correctPuesto(r['Puesto Completo']);
+    const area = deriveArea(puesto);
     const fechaIngreso = toIsoDate(r['Fecha de Contratación']);
 
     if (r['Estatus'] === 'Activo') {
+      const nivelPuestoRaw = collapseSpaces(r['Nivel de Puesto']);
+      const nivelPuesto = NIVEL_INDEFINIDO.has(nivelPuestoRaw) ? null : nivelPuestoRaw;
+      const edad = r['Edad'] ? Number(r['Edad']) : null;
+
       personas.push({
         id,
         name: nombre,
-        rol: r['Puesto Completo'] || '',
+        rol: puesto,
         reportsTo: nameToId.get(normalizeName(r['Reporta a:'] || '')) || null,
         email: (r['Correo'] || '').toLowerCase(),
       });
-      // el Sheet no registra fecha de cambio de puesto; se usa la de contratación
-      empleados.push({ id, nombre, area, fechaIngreso, fechaPuesto: fechaIngreso });
+      empleados.push({
+        id,
+        nombre,
+        area,
+        rol: puesto,
+        nivelPuesto,
+        sexo: r['Sexo'] || null,
+        edad: Number.isFinite(edad) ? edad : null,
+        fechaIngreso,
+        fechaPuesto: fechaIngreso, // el Sheet no registra fecha de cambio de puesto
+        reportsTo: nameToId.get(normalizeName(r['Reporta a:'] || '')) || null,
+      });
+
+      const camposFaltantes = [
+        !nivelPuesto && 'Nivel de Puesto',
+        !edad && 'Edad',
+        !puesto && 'Puesto',
+        !fechaIngreso && 'Fecha de Contratación',
+      ].filter(Boolean);
+      if (camposFaltantes.length) incompletos.push({ id, nombre, campos: camposFaltantes });
     } else {
       const fecha = toIsoDate(r['Fecha de Baja']);
       if (fecha) {
@@ -104,12 +166,12 @@ export async function loadEmpleadosFromSheet(sheetId) {
           empleado: nombre,
           area,
           fecha,
-          fechaIngreso, // para reconstruir headcount histórico (ver headcountAsOf en calc.js)
+          fechaIngreso, // para reconstruir headcount histórico si hiciera falta
           tipo: r['Tipo de Baja'] === 'Involuntaria' ? 'Involuntaria' : 'Voluntaria',
           motivo: r['Motivo de Baja'] || '',
         });
       }
     }
   }
-  return { personas, empleados, bajas };
+  return { personas, empleados, bajas, dataQuality: { excluidos, incompletos } };
 }

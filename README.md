@@ -27,7 +27,7 @@ interius-kpi-tracker/
 │       ├── equipo.js         → listado y detalle de equipo
 │       ├── kpis.js           → tabla editable de KPIs
 │       ├── organigrama.js    → árbol de reporte
-│       └── people.js         → People Analytics (HC, bajas, rotación, antigüedad)
+│       └── people.js         → People Analytics (estructura, antigüedad, demografía, calidad de datos — solo Estatus=Activo)
 └── data/                  → AQUÍ VIVEN LAS FUENTES DE DATOS
     ├── clientes.json      → tabla de clientes
     ├── personas.json      → SOLO control de acceso: [{ email, role }] de quien puede iniciar sesión
@@ -57,13 +57,24 @@ Estas tres tablas ya **no** viven en `/data` — se leen en vivo de la pestaña
   (`.../export?format=csv`). Si lo vuelves a poner privado, la app deja de
   poder leerlo.
 - Columnas que usa: `INTERIUS ID`, `Nombre Completo`, `Puesto Completo`,
-  `Reporta a:`, `Área`, `Fecha de Contratación`, `Estatus` (`Activo` /
-  `Inactivo`), `Tipo de Baja`, `Motivo de Baja`, `Fecha de Baja`, `Correo`.
-- Filas con `Nombre Completo` en blanco se ignoran. Filas `Activo` alimentan
-  Equipo/Organigrama y Antigüedad; filas `Inactivo` con `Fecha de Baja`
-  alimentan Bajas.
-- El Sheet no tiene fecha de cambio de puesto, así que "antigüedad en el
-  puesto" usa la misma fecha que "antigüedad" (fecha de contratación).
+  `Nivel de Puesto`, `Reporta a:`, `Sexo`, `Edad`, `Fecha de Contratación`,
+  `Estatus` (`Activo` / `Inactivo`), `Tipo de Baja`, `Motivo de Baja`, `Fecha
+  de Baja`, `Correo`.
+- El Sheet **no tiene columna "Área"**: se deriva en `sheets.js`
+  (`deriveArea`) a partir del prefijo de `Puesto Completo` (ej. "SEO
+  Consultant" → SEO). Lo que no matchea ningún prefijo conocido cae en
+  "Dirección/Otra".
+- `sheets.js` también corrige typos conocidos de `Puesto Completo`
+  (`PUESTO_FIXES`) y colapsa espacios extra en nombre/puesto antes de derivar
+  el área o mostrar el dato.
+- Filas con `Nombre Completo` en blanco se ignoran (y se cuentan en
+  `dataQuality.excluidos` si su `Estatus` era `Activo`). Filas `Activo`
+  alimentan Equipo/Organigrama/People Analytics; filas `Inactivo` con `Fecha
+  de Baja` alimentan `appData.bajas` (dato disponible pero sin vista propia
+  hoy). Activos con `Nivel de Puesto` vacío o "Por Definir" cuentan en el
+  headcount pero se listan en `dataQuality.incompletos`.
+- El Sheet no tiene fecha de cambio de puesto, así que `fechaPuesto` usa la
+  misma fecha que `fechaIngreso` (fecha de contratación).
 - El Sheet **no** tiene el rol de acceso (`super_admin` / `admin` /
   `usuario`) — eso sigue viviendo en `data/personas.json`, a propósito: no
   quieres que cualquiera con el link del Sheet pueda otorgarse acceso de
@@ -171,6 +182,8 @@ de contratación y motivos de baja de todo el equipo, sin iniciar sesión.
 - **Equipo**: personas, sus KPIs asignados y calificación de desempeño estimada.
 - **Organigrama**: quién le reporta a quién.
 - **KPIs**: tabla editable de todos los KPIs de negocio.
-- **People Analytics**: HC, Bajas, Rotación, Antigüedad y Antigüedad en el puesto
-  — este módulo es **solo de consulta** (no se captura información ahí, solo se
-  visualiza lo que ya existe en `/data`).
+- **People Analytics**: Estructura, Antigüedad, Demografía, Contrataciones,
+  Calidad de datos y Cruces estratégicos — es una **foto de la plantilla
+  activa** (`Estatus = Activo` únicamente, no análisis de flujo de
+  entradas/salidas) y es **solo de consulta** (no se captura información ahí,
+  solo se visualiza lo que ya existe en `/data` y el Sheet).
