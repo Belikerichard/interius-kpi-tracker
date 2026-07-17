@@ -5,6 +5,24 @@ import { switchView } from '../nav.js';
 import { openPersonaDetalle } from './equipo.js';
 
 const expandedIds = new Set();
+let searchQuery = '';
+
+const SIZE_BY_DEPTH = [
+  { avatar: 56, width: 172, font: 17 },
+  { avatar: 46, width: 154, font: 15 },
+  { avatar: 40, width: 142, font: 13 },
+];
+function sizeForDepth(depth) {
+  return SIZE_BY_DEPTH[Math.min(depth, SIZE_BY_DEPTH.length - 1)];
+}
+
+function normalize(s) {
+  return (s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+}
 
 export function renderOrganigrama() {
   const wrap = document.getElementById('org-chart-wrap');
@@ -14,6 +32,7 @@ export function renderOrganigrama() {
     return;
   }
   const validIds = new Set(personas.map((p) => p.id));
+  const personaById = Object.fromEntries(personas.map((p) => [p.id, p]));
   const childrenMap = {};
   personas.forEach((p) => {
     if (p.reportsTo && validIds.has(p.reportsTo)) (childrenMap[p.reportsTo] ||= []).push(p);
@@ -21,7 +40,25 @@ export function renderOrganigrama() {
   const empleadoById = Object.fromEntries(appData.empleados.map((e) => [e.id, e]));
   const roots = personas.filter((p) => !p.reportsTo || !validIds.has(p.reportsTo));
 
-  wrap.innerHTML = `<div class="org-tree">${renderLevel(roots, null, childrenMap, empleadoById, new Set())}</div>`;
+  const q = normalize(searchQuery);
+  let matches = new Set();
+  if (q) {
+    personas.forEach((p) => {
+      if (normalize(p.name).includes(q)) {
+        matches.add(p.id);
+        // revela la ruta hasta la raíz para que el match quede visible
+        let cur = p;
+        while (cur.reportsTo && personaById[cur.reportsTo]) {
+          expandedIds.add(cur.reportsTo);
+          cur = personaById[cur.reportsTo];
+        }
+      }
+    });
+  }
+
+  wrap.innerHTML = q && !matches.size
+    ? `<div class="empty">Nadie con "${searchQuery}" en el nombre.</div>`
+    : `<div class="org-tree">${renderLevel(roots, null, childrenMap, empleadoById, new Set(), 0, matches)}</div>`;
 
   wrap.querySelectorAll('[data-orgcard]').forEach((el) => {
     el.addEventListener('click', () => {
@@ -40,11 +77,22 @@ export function renderOrganigrama() {
   });
 }
 
-function renderLevel(nodes, color, childrenMap, empleadoById, visited) {
-  return `<div class="org-level">${nodes.map((n, i) => renderNode(n, color ?? PALETTE[i % PALETTE.length], childrenMap, empleadoById, visited)).join('')}</div>`;
+document.getElementById('org-search').addEventListener('input', (e) => {
+  searchQuery = e.target.value;
+  renderOrganigrama();
+});
+document.getElementById('org-collapse-all').addEventListener('click', () => {
+  expandedIds.clear();
+  searchQuery = '';
+  document.getElementById('org-search').value = '';
+  renderOrganigrama();
+});
+
+function renderLevel(nodes, color, childrenMap, empleadoById, visited, depth, matches) {
+  return `<div class="org-level">${nodes.map((n, i) => renderNode(n, color ?? PALETTE[i % PALETTE.length], childrenMap, empleadoById, visited, depth, matches)).join('')}</div>`;
 }
 
-function renderNode(p, color, childrenMap, empleadoById, visited) {
+function renderNode(p, color, childrenMap, empleadoById, visited, depth, matches) {
   if (visited.has(p.id)) return '';
   const nextVisited = new Set(visited);
   nextVisited.add(p.id);
@@ -53,17 +101,23 @@ function renderNode(p, color, childrenMap, empleadoById, visited) {
   const size = teamSize(p.id, childrenMap, new Set());
   const expanded = expandedIds.has(p.id);
   const area = empleadoById[p.id]?.area || '';
+  const { avatar, width, font } = sizeForDepth(depth);
+  const isMatch = matches.has(p.id);
 
   return `<div class="org-node">
-    <div class="org-card2" style="--org-color:${color}" data-orgcard="${p.id}">
-      <div class="avatar" style="width:56px;height:56px;border-radius:50%;font-size:17px;margin:0 auto 10px;background:${color}">${initials(p.name)}</div>
-      ${area ? `<div class="org-dept-label" style="color:${color}">${area}</div>` : ''}
+    <div class="org-card2${isMatch ? ' org-match' : ''}" style="--org-color:${color};width:${width}px;min-height:${width + 20}px" data-orgcard="${p.id}">
+      <div class="avatar" style="width:${avatar}px;height:${avatar}px;border-radius:50%;font-size:${font}px;margin:0 auto 10px;background:${color}">${initials(p.name)}</div>
+      <div class="org-dept-label" style="color:${color}">${area || ' '}</div>
       <div class="org-name">${p.name}</div>
       <div class="org-role">${p.rol || 'Sin puesto'}</div>
       ${size ? `<div class="badge-team" style="background:${color}1a;color:${color}">${size} ${size === 1 ? 'persona' : 'personas'}</div>` : ''}
     </div>
     ${kids.length ? `<button type="button" class="org-toggle" data-orgtoggle="${p.id}">${expanded ? '▲ Ocultar equipo' : `▾ Ver equipo (${kids.length})`}</button>` : ''}
-    ${kids.length && expanded ? `<div class="org-connector"></div>${renderLevel(kids, color, childrenMap, empleadoById, nextVisited)}` : ''}
+    ${
+      kids.length && expanded
+        ? `<div class="org-connector" style="background:${color}"></div>${renderLevel(kids, color, childrenMap, empleadoById, nextVisited, depth + 1, matches)}`
+        : ''
+    }
   </div>`;
 }
 
