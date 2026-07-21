@@ -17,6 +17,9 @@ import { applyPermissionsToChrome, canEdit } from './permissions.js';
 
 const ROLE_LABELS = { super_admin: 'Super Admin', admin: 'Admin', usuario: 'Usuario' };
 
+// ponytail: iOS Safari won't fire :active/:hover anywhere without a touch listener present
+document.addEventListener('touchstart', () => {}, { passive: true });
+
 function showApp() {
   document.getElementById('view-login').style.display = 'none';
   document.getElementById('app-shell').style.display = 'flex';

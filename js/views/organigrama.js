@@ -1,20 +1,11 @@
 import { appData } from '../state.js';
-import { initials, PALETTE } from '../utils.js';
+import { initials, PALETTE, withViewTransition } from '../utils.js';
 import { visiblePersonas } from '../permissions.js';
 import { switchView } from '../nav.js';
 import { openPersonaDetalle } from './equipo.js';
 
-const expandedIds = new Set();
+let focusId = null; // null = sin selección: entra al CEO si hay uno solo, si no hay un único root muestra todos
 let searchQuery = '';
-
-const SIZE_BY_DEPTH = [
-  { avatar: 56, width: 172, font: 17 },
-  { avatar: 46, width: 154, font: 15 },
-  { avatar: 40, width: 142, font: 13 },
-];
-function sizeForDepth(depth) {
-  return SIZE_BY_DEPTH[Math.min(depth, SIZE_BY_DEPTH.length - 1)];
-}
 
 function normalize(s) {
   return (s || '')
@@ -39,40 +30,44 @@ export function renderOrganigrama() {
   });
   const empleadoById = Object.fromEntries(appData.empleados.map((e) => [e.id, e]));
   const roots = personas.filter((p) => !p.reportsTo || !validIds.has(p.reportsTo));
+  const colorOf = buildColorMap(roots, childrenMap);
+
+  if (focusId && !personaById[focusId]) focusId = null; // por si la persona enfocada ya no existe
+  if (focusId === null && roots.length === 1) focusId = roots[0].id; // entra directo al CEO y su equipo
 
   const q = normalize(searchQuery);
-  let matches = new Set();
+  let matchId = null;
   if (q) {
-    personas.forEach((p) => {
-      if (normalize(p.name).includes(q)) {
-        matches.add(p.id);
-        // revela la ruta hasta la raíz para que el match quede visible
-        let cur = p;
-        while (cur.reportsTo && personaById[cur.reportsTo]) {
-          expandedIds.add(cur.reportsTo);
-          cur = personaById[cur.reportsTo];
-        }
-      }
-    });
+    const match = personas.find((p) => normalize(p.name).includes(q));
+    if (match) {
+      matchId = match.id;
+      focusId = personaById[match.reportsTo] ? match.reportsTo : null;
+    }
   }
 
-  wrap.innerHTML = q && !matches.size
-    ? `<div class="empty">Nadie con "${searchQuery}" en el nombre.</div>`
-    : `<div class="org-tree">${renderLevel(roots, null, childrenMap, empleadoById, new Set(), 0, matches)}</div>`;
+  wrap.innerHTML =
+    q && !matchId
+      ? `<div class="empty">Nadie con "${searchQuery}" en el nombre.</div>`
+      : renderFocusView(focusId, roots, childrenMap, personaById, empleadoById, colorOf, matchId);
 
   wrap.querySelectorAll('[data-orgcard]').forEach((el) => {
     el.addEventListener('click', () => {
-      openPersonaDetalle(el.dataset.orgcard);
-      switchView('persona-detalle');
+      const id = el.dataset.orgcard;
+      if (el.dataset.hasreports === 'true') {
+        focusId = id;
+        searchQuery = '';
+        document.getElementById('org-search').value = '';
+        withViewTransition(() => renderOrganigrama());
+      } else {
+        openPersonaDetalle(id);
+        switchView('persona-detalle');
+      }
     });
   });
-  wrap.querySelectorAll('[data-orgtoggle]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.orgtoggle;
-      if (expandedIds.has(id)) expandedIds.delete(id);
-      else expandedIds.add(id);
-      renderOrganigrama();
+  wrap.querySelectorAll('[data-orgup]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      focusId = btn.dataset.orgup || null;
+      withViewTransition(() => renderOrganigrama());
     });
   });
 }
@@ -82,42 +77,61 @@ document.getElementById('org-search').addEventListener('input', (e) => {
   renderOrganigrama();
 });
 document.getElementById('org-collapse-all').addEventListener('click', () => {
-  expandedIds.clear();
+  focusId = null;
   searchQuery = '';
   document.getElementById('org-search').value = '';
-  renderOrganigrama();
+  withViewTransition(() => renderOrganigrama());
 });
 
-function renderLevel(nodes, color, childrenMap, empleadoById, visited, depth, matches) {
-  return `<div class="org-level">${nodes.map((n, i) => renderNode(n, color ?? PALETTE[i % PALETTE.length], childrenMap, empleadoById, visited, depth, matches)).join('')}</div>`;
+/* Cada raíz (manager de primer nivel) tiene su propio color; toda su
+   descendencia hereda ese color para mantener identidad de rama al navegar. */
+function buildColorMap(roots, childrenMap) {
+  const map = {};
+  roots.forEach((r, i) => {
+    const color = PALETTE[i % PALETTE.length];
+    const stack = [r.id];
+    while (stack.length) {
+      const id = stack.pop();
+      map[id] = color;
+      (childrenMap[id] || []).forEach((c) => stack.push(c.id));
+    }
+  });
+  return map;
 }
 
-function renderNode(p, color, childrenMap, empleadoById, visited, depth, matches) {
-  if (visited.has(p.id)) return '';
-  const nextVisited = new Set(visited);
-  nextVisited.add(p.id);
+function renderFocusView(focusId, roots, childrenMap, personaById, empleadoById, colorOf, matchId) {
+  const focus = focusId ? personaById[focusId] : null;
+  const level = focus ? childrenMap[focus.id] || [] : roots;
 
+  const upBtn = focus && personaById[focus.reportsTo] ? `<button type="button" class="org-up" data-orgup="${focus.reportsTo}">↑ Subir de nivel</button>` : '';
+
+  const focusHtml = focus
+    ? `<div class="org-focus">${renderCard(focus, colorOf[focus.id], childrenMap, empleadoById, 'lg', matchId === focus.id)}</div>
+       <div class="org-connector" style="background:${colorOf[focus.id]}"></div>`
+    : '';
+
+  const levelHtml = level.length
+    ? `<div class="org-level">${level.map((p) => renderCard(p, colorOf[p.id], childrenMap, empleadoById, 'md', matchId === p.id)).join('')}</div>`
+    : `<div class="empty">Sin reportes directos.</div>`;
+
+  return `<div class="org-focus-view">${upBtn}${focusHtml}${levelHtml}</div>`;
+}
+
+function renderCard(p, color, childrenMap, empleadoById, size, isMatch) {
   const kids = childrenMap[p.id] || [];
-  const size = teamSize(p.id, childrenMap, new Set());
-  const expanded = expandedIds.has(p.id);
+  const count = teamSize(p.id, childrenMap, new Set());
   const area = empleadoById[p.id]?.area || '';
-  const { avatar, width, font } = sizeForDepth(depth);
-  const isMatch = matches.has(p.id);
+  const dims = size === 'lg' ? { avatar: 68, width: 200, font: 20, minHeight: 236 } : { avatar: 52, width: 168, font: 16, minHeight: 200 };
 
   return `<div class="org-node">
-    <div class="org-card2${isMatch ? ' org-match' : ''}" style="--org-color:${color};width:${width}px;min-height:${width + 20}px" data-orgcard="${p.id}">
-      <div class="avatar" style="width:${avatar}px;height:${avatar}px;border-radius:50%;font-size:${font}px;margin:0 auto 10px;background:${color}">${initials(p.name)}</div>
-      <div class="org-dept-label" style="color:${color}">${area || ' '}</div>
+    <div class="org-card2${isMatch ? ' org-match' : ''}" style="--org-color:${color};width:${dims.width}px;min-height:${dims.minHeight}px" data-orgcard="${p.id}" data-hasreports="${kids.length > 0}">
+      <div class="avatar" style="width:${dims.avatar}px;height:${dims.avatar}px;border-radius:50%;font-size:${dims.font}px;margin:0 auto 10px;background:${color}">${initials(p.name)}</div>
+      <div class="org-dept-label" style="color:${color}">${area || ' '}</div>
       <div class="org-name">${p.name}</div>
       <div class="org-role">${p.rol || 'Sin puesto'}</div>
-      ${size ? `<div class="badge-team" style="background:${color}1a;color:${color}">${size} ${size === 1 ? 'persona' : 'personas'}</div>` : ''}
+      ${count ? `<div class="badge-team" style="background:${color}1a;color:${color}">${count} ${count === 1 ? 'persona' : 'personas'}</div>` : ''}
+      ${kids.length ? `<div class="org-hint" style="color:${color}">Ver equipo (${kids.length}) →</div>` : ''}
     </div>
-    ${kids.length ? `<button type="button" class="org-toggle" data-orgtoggle="${p.id}">${expanded ? '▲ Ocultar equipo' : `▾ Ver equipo (${kids.length})`}</button>` : ''}
-    ${
-      kids.length && expanded
-        ? `<div class="org-connector" style="background:${color}"></div>${renderLevel(kids, color, childrenMap, empleadoById, nextVisited, depth + 1, matches)}`
-        : ''
-    }
   </div>`;
 }
 

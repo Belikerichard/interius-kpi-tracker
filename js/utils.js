@@ -1,5 +1,14 @@
 export const PALETTE = ['#19199A', '#EE7D38', '#4C4DF6', '#66BCF9', '#1E9E6B', '#E0A61A', '#D64545', '#7A5CFA'];
 
+// ponytail: native View Transitions API, falls back to a plain DOM update when unsupported
+export function withViewTransition(fn) {
+  if (!document.startViewTransition) {
+    fn();
+    return;
+  }
+  document.startViewTransition(fn);
+}
+
 export function colorFor(id, list) {
   const idx = list.findIndex((x) => x.id === id);
   return PALETTE[idx % PALETTE.length];

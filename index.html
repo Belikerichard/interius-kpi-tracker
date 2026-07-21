@@ -15,10 +15,11 @@
       };
       Chart.register({
         id: 'valueLabels',
-        afterDatasetsDraw(chart) {
+        afterDatasetsDraw(chart, args, opts) {
           if (chart.config.type === 'doughnut' || chart.config.type === 'scatter') return;
           const { ctx } = chart;
           const horizontal = chart.options.indexAxis === 'y';
+          const suffix = opts.suffix || '';
           ctx.save();
           ctx.font = '600 11px -apple-system, BlinkMacSystemFont, sans-serif';
           ctx.fillStyle = '#14142b';
@@ -28,7 +29,7 @@
             meta.data.forEach((el, index) => {
               const value = dataset.data[index];
               if (value === null || value === undefined || value === '') return;
-              const label = typeof value === 'number' ? Math.round(value * 10) / 10 : value;
+              const label = typeof value === 'number' ? `${Math.round(value * 10) / 10}${suffix}` : value;
               const { x, y } = el.getProps(['x', 'y'], true);
               if (horizontal) {
                 ctx.textAlign = 'left';
@@ -198,7 +199,7 @@
           </div>
           <div class="filters-row">
             <input type="text" class="filter-input" id="org-search" placeholder="Buscar por nombre..." style="width: 240px" />
-            <button type="button" class="btn secondary" id="org-collapse-all">Colapsar todo</button>
+            <button type="button" class="btn secondary" id="org-collapse-all">Ir al inicio</button>
           </div>
           <div class="panel" style="overflow-x: auto">
             <div id="org-chart-wrap"></div>

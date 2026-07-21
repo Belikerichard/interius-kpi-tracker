@@ -19,9 +19,9 @@ let chartArea = null,
   chartCrecimientoAcumulado = null,
   chartLideres = null;
 
-const NIVEL_ORDEN = ['Executive', 'Manager', 'Jr Manager', 'Sr Consultant', 'Consultant', 'Jr Consultant', 'Specialist', 'Analyst', 'Trainee', 'Sin definir'];
-const AREAS_ORDEN = ['SEO', 'Paid Media', 'Inbound', 'Estrategia/BI', 'Capital Humano', 'Diseño', 'Desarrollo', 'UX', 'Dirección/Otra'];
-const LIDERES = new Set(['Manager', 'Jr Manager', 'Executive']);
+const NIVEL_ORDEN = ['CEO', 'Manager', 'Jr Manager', 'Sr Consultant', 'Consultant', 'Jr Consultant', 'Specialist', 'Analyst', 'Trainee', 'Sin definir'];
+const AREAS_ORDEN = ['SEO', 'Inbound Marketing', 'Publicidad Digital', 'Estrategia Digital', 'Administración & Recursos Humanos', 'Sin área'];
+const LIDERES = new Set(['CEO', 'Manager', 'Jr Manager', 'Executive']);
 const NIVELES_JR = new Set(['Specialist', 'Jr Consultant', 'Jr Manager']);
 
 export function switchSubtab(name) {
@@ -65,8 +65,33 @@ function groupBy(items, keyFn) {
   return map;
 }
 
+/* Chart.js no envuelve etiquetas largas por su cuenta: si no rota el texto,
+   las etiquetas que no caben se solapan o se saltan. Partirlas en líneas
+   (arreglo de strings) sí las muestra en varios renglones, horizontales. */
+function wrapLabel(label, maxLen = 14) {
+  if (label.length <= maxLen) return label;
+  const words = label.split(' ');
+  const lines = [];
+  let current = '';
+  for (const w of words) {
+    if (current && (current + ' ' + w).length > maxLen) {
+      lines.push(current);
+      current = w;
+    } else {
+      current = current ? `${current} ${w}` : w;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+/* Antepone el orden conocido, pero nunca descarta valores reales que no
+   estén en la lista (ej. si agregan un área nueva en el Sheet) — se
+   agregan al final en vez de desaparecer en silencio de las gráficas. */
 function orderedKeys(present, order) {
-  return order.filter((k) => present.has(k));
+  const known = order.filter((k) => present.has(k));
+  const extra = [...present].filter((k) => !order.includes(k)).sort();
+  return [...known, ...extra];
 }
 
 /* ---- 1. ESTRUCTURA ORGANIZACIONAL ---- */
@@ -81,8 +106,11 @@ function renderEstructura() {
   if (chartArea) chartArea.destroy();
   chartArea = new Chart(document.getElementById('chart-area'), {
     type: 'bar',
-    data: { labels: areas, datasets: [{ data: areas.map((a) => byArea[a].length), backgroundColor: '#19199A', borderRadius: 5, maxBarThickness: 40 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+    data: { labels: areas.map(wrapLabel), datasets: [{ data: areas.map((a) => byArea[a].length), backgroundColor: '#19199A', borderRadius: 5, maxBarThickness: 40 }] },
+    options: {
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: { x: { ticks: { maxRotation: 0, minRotation: 0, autoSkip: false } }, y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+    },
   });
 
   const byNivel = groupBy(emp, (e) => e.nivel);
@@ -90,8 +118,11 @@ function renderEstructura() {
   if (chartNivel) chartNivel.destroy();
   chartNivel = new Chart(document.getElementById('chart-nivel'), {
     type: 'bar',
-    data: { labels: niveles, datasets: [{ data: niveles.map((n) => byNivel[n].length), backgroundColor: '#4C4DF6', borderRadius: 5, maxBarThickness: 40 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+    data: { labels: niveles.map((n) => wrapLabel(n, 9)), datasets: [{ data: niveles.map((n) => byNivel[n].length), backgroundColor: '#4C4DF6', borderRadius: 5, maxBarThickness: 40 }] },
+    options: {
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: { x: { ticks: { maxRotation: 0, minRotation: 0, autoSkip: false, font: { size: 10 } } }, y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+    },
   });
 
   if (chartPiramide) chartPiramide.destroy();
@@ -100,8 +131,8 @@ function renderEstructura() {
     data: { labels: niveles, datasets: [{ data: niveles.map((n) => Math.round((byNivel[n].length / emp.length) * 1000) / 10), backgroundColor: '#EE7D38', borderRadius: 5 }] },
     options: {
       indexAxis: 'y',
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.x}%` } } },
-      scales: { x: { beginAtZero: true, ticks: { callback: (v) => v + '%' } } },
+      plugins: { legend: { display: false }, tooltip: { enabled: false }, valueLabels: { suffix: '%' } },
+      scales: { x: { beginAtZero: true, ticks: { callback: (v) => v + '%' } }, y: { ticks: { autoSkip: false } } },
     },
   });
 
