@@ -34,11 +34,13 @@ export function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 1800);
 }
 
-export function tenureYears(dateStr) {
+export function tenureYears(dateStr, toDateStr) {
   if (!dateStr) return null;
   const from = new Date(dateStr + 'T00:00:00');
   if (isNaN(from)) return null;
-  return (Date.now() - from.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+  const to = toDateStr ? new Date(toDateStr + 'T00:00:00') : new Date();
+  if (isNaN(to)) return null;
+  return (to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
 }
 
 export function fmtYears(y) {

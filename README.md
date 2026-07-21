@@ -73,9 +73,10 @@ Estas tres tablas ya **no** viven en `/data` — se leen en vivo de la pestaña
 - Filas con `Nombre Completo` en blanco se ignoran (y se cuentan en
   `dataQuality.excluidos` si su `Estatus` era `Activo`). Filas `Activo`
   alimentan Equipo/Organigrama/People Analytics; filas `Inactivo` con `Fecha
-  de Baja` alimentan `appData.bajas` (dato disponible pero sin vista propia
-  hoy). Activos con `Nivel de Puesto` vacío o "Por Definir" cuentan en el
-  headcount pero se listan en `dataQuality.incompletos`.
+  de Baja` alimentan `appData.bajas` (con `nivelPuesto` incluido), que usa la
+  subtab "Rotación" de People Analytics. Activos con `Nivel de Puesto` vacío
+  o "Por Definir" cuentan en el headcount pero se listan en
+  `dataQuality.incompletos`.
 - El Sheet no tiene fecha de cambio de puesto, así que `fechaPuesto` usa la
   misma fecha que `fechaIngreso` (fecha de contratación).
 - El Sheet **no** tiene el rol de acceso (`super_admin` / `admin` /

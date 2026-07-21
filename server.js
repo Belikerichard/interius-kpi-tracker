@@ -51,24 +51,36 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(__dirname));
 
+// ponytail: en Vercel el filesystem del deploy es de solo lectura (fuera de
+// /tmp) — el caché a disco es best-effort; si falla, cada request recompone
+// desde el Sheet en vez de tronar. Local (npm start) no cambia: sigue
+// cacheando a data/store.json como antes.
+async function cacheStore(data) {
+  try {
+    await writeFile(STORE_PATH, JSON.stringify(data));
+  } catch {
+    /* solo lectura (serverless) — sin caché, próxima request recompone */
+  }
+}
+
 app.get('/api/data', async (req, res) => {
   try {
     res.json(JSON.parse(await readFile(STORE_PATH, 'utf8')));
   } catch {
     const data = await loadSourceTables();
-    await writeFile(STORE_PATH, JSON.stringify(data));
+    await cacheStore(data);
     res.json(data);
   }
 });
 
 app.post('/api/data', async (req, res) => {
-  await writeFile(STORE_PATH, JSON.stringify(req.body));
+  await cacheStore(req.body);
   res.json({ ok: true });
 });
 
 app.post('/api/data/restore', async (req, res) => {
   const data = await loadSourceTables();
-  await writeFile(STORE_PATH, JSON.stringify(data));
+  await cacheStore(data);
   res.json(data);
 });
 
@@ -81,7 +93,7 @@ app.get('/api/personas', async (req, res) => {
   try {
     const stored = JSON.parse(await readFile(STORE_PATH, 'utf8'));
     stored.personas = personas;
-    await writeFile(STORE_PATH, JSON.stringify(stored));
+    await cacheStore(stored);
   } catch {
     /* si todavía no hay store.json, /api/data lo va a componer completo */
   }
@@ -89,4 +101,10 @@ app.get('/api/personas', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`http://localhost:${PORT}`));
+// ponytail: en Vercel este archivo se importa como función serverless (ver
+// vercel.json) — ahí no se llama listen(), Vercel maneja el socket.
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => console.log(`http://localhost:${PORT}`));
+}
+
+export default app;

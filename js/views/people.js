@@ -17,7 +17,12 @@ let chartArea = null,
   chartAltasMes = null,
   chartAltasArea = null,
   chartCrecimientoAcumulado = null,
-  chartLideres = null;
+  chartLideres = null,
+  chartRotacionMensual = null,
+  chartRotacionArea = null,
+  chartTipoBaja = null,
+  chartMotivos = null,
+  chartAntiguedadBaja = null;
 
 const NIVEL_ORDEN = ['CEO', 'Manager', 'Jr Manager', 'Sr Consultant', 'Consultant', 'Jr Consultant', 'Specialist', 'Analyst', 'Trainee', 'Sin definir'];
 const AREAS_ORDEN = ['SEO', 'Inbound Marketing', 'Publicidad Digital', 'Estrategia Digital', 'Administración & Recursos Humanos', 'Sin área'];
@@ -34,6 +39,7 @@ export function switchSubtab(name) {
   if (name === 'antiguedad') renderAntiguedad();
   if (name === 'demografia') renderDemografia();
   if (name === 'contrataciones') renderContrataciones();
+  if (name === 'rotacion') renderRotacion();
   if (name === 'calidad') renderCalidad();
   if (name === 'cruces') renderCruces();
 }
@@ -46,9 +52,195 @@ document.querySelectorAll('.subtab').forEach((t) => {
   t.addEventListener('click', () => switchSubtab(t.dataset.subtab));
 });
 
+/* ---- filtros de fecha por apartado ----
+   Cada subtab tiene su propio rango Desde/Hasta independiente (no uno
+   compartido) — así se pidió: filtros dentro de cada apartado. Los
+   defaults reproducen la ventana que cada vista mostraba antes de que
+   existiera el filtro. Calidad de datos no tiene filtro: audita el estado
+   actual del Sheet, no tiene sentido histórico. */
+const RANGE_DEFAULTS = {
+  estructura: ['', mesActual()],
+  antiguedad: ['', mesActual()],
+  demografia: ['', mesActual()],
+  contrataciones: [mesesAtras(18), mesActual()],
+  rotacion: [mesesAtras(12), mesActual()],
+  cruces: ['', mesActual()],
+};
+const RANGE_RENDERERS = {
+  estructura: () => renderEstructura(),
+  antiguedad: () => renderAntiguedad(),
+  demografia: () => renderDemografia(),
+  contrataciones: () => renderContrataciones(),
+  rotacion: () => renderRotacion(),
+  cruces: () => renderCruces(),
+};
+/* El picker nativo de mes se siente lento si puedes navegar años sin límite
+   (Enero 2017 es antes del registro más viejo del Sheet) — acotarlo con
+   min/max evita eso y de paso no deja elegir un mes futuro. */
+const FECHA_MIN_FILTRO = '2017-01';
+Object.entries(RANGE_DEFAULTS).forEach(([prefix, [desde, hasta]]) => {
+  const desdeEl = document.getElementById(`${prefix}-desde`);
+  const hastaEl = document.getElementById(`${prefix}-hasta`);
+  if (desdeEl) {
+    desdeEl.value = desde;
+    desdeEl.min = FECHA_MIN_FILTRO;
+    desdeEl.max = mesActual();
+  }
+  if (hastaEl) {
+    hastaEl.value = hasta;
+    hastaEl.min = FECHA_MIN_FILTRO;
+    hastaEl.max = mesActual();
+  }
+  desdeEl?.addEventListener('change', RANGE_RENDERERS[prefix]);
+  hastaEl?.addEventListener('change', RANGE_RENDERERS[prefix]);
+});
+
 /* ---- helpers compartidos ---- */
 function activos() {
   return appData.empleados.map((e) => ({ ...e, nivel: e.nivelPuesto || 'Sin definir', antiguedad: tenureYears(e.fechaIngreso) }));
+}
+
+/* ---- reconstrucción histórica ----
+   appData.empleados solo trae activos hoy y appData.bajas solo bajas con
+   fecha real (el sentinela 12/31/9999 ya se filtró en sheets.js). Para
+   responder "cómo estaba la organización en estas fechas" hace falta unir
+   ambas listas con su fechaIngreso/fechaSalida y reconstruir quién estaba
+   activo en cualquier fecha pasada. Área/nivel se tratan como constantes
+   durante todo el tenure de la persona porque el Sheet no registra cambios
+   de puesto (ver README) — la misma simplificación que ya usaba el resto
+   de esta vista, no es nueva para el filtro de fechas. */
+function historico() {
+  const activosNow = appData.empleados.map((e) => ({
+    id: e.id,
+    nombre: e.nombre,
+    area: e.area,
+    nivel: e.nivelPuesto || 'Sin definir',
+    sexo: e.sexo,
+    fechaNacimiento: e.fechaNacimiento,
+    reportsTo: e.reportsTo,
+    fechaIngreso: e.fechaIngreso,
+    fechaSalida: null,
+  }));
+  const bajas = (appData.bajas || []).map((b) => ({
+    id: b.id,
+    nombre: b.empleado,
+    area: b.area,
+    nivel: b.nivelPuesto || 'Sin definir',
+    sexo: b.sexo,
+    fechaNacimiento: b.fechaNacimiento,
+    reportsTo: b.reportsTo,
+    fechaIngreso: b.fechaIngreso,
+    fechaSalida: b.fecha,
+    tipo: b.tipo,
+    motivo: b.motivo,
+    fecha: b.fecha,
+  }));
+  return { all: [...activosNow, ...bajas], bajas };
+}
+
+function headcountAt(dateStr, all, pred = () => true) {
+  return all.filter((r) => pred(r) && r.fechaIngreso && r.fechaIngreso <= dateStr && (!r.fechaSalida || r.fechaSalida > dateStr)).length;
+}
+
+/* true si el tenure de r se traslapa con [desde, hasta] (desde vacío = sin límite inferior) */
+function enRango(r, desde, hasta) {
+  if (!r.fechaIngreso || r.fechaIngreso > hasta) return false;
+  if (desde && r.fechaSalida && r.fechaSalida < desde) return false;
+  return true;
+}
+
+/* fecha de corte real de una persona: su fecha de baja si salió antes del
+   corte pedido, si no, el corte mismo. La usan antigüedad y edad para que
+   ninguna de las dos siga "contando" después de que la persona se fue. */
+function corteEfectivo(r, hasta) {
+  return r.fechaSalida && r.fechaSalida < hasta ? r.fechaSalida : hasta;
+}
+
+function antiguedadEnCorte(r, hasta) {
+  return tenureYears(r.fechaIngreso, corteEfectivo(r, hasta));
+}
+
+/* edad en años cumplidos a una fecha — a diferencia de antigüedad (decimal),
+   la edad se expresa en años enteros. */
+function edadEnFecha(fechaNacimiento, fecha) {
+  if (!fechaNacimiento) return null;
+  const nac = new Date(fechaNacimiento + 'T00:00:00');
+  const corte = new Date(fecha + 'T00:00:00');
+  let edad = corte.getFullYear() - nac.getFullYear();
+  const antesDeCumplir = corte.getMonth() < nac.getMonth() || (corte.getMonth() === nac.getMonth() && corte.getDate() < nac.getDate());
+  if (antesDeCumplir) edad--;
+  return edad;
+}
+
+function edadEnCorte(r, hasta) {
+  return edadEnFecha(r.fechaNacimiento, corteEfectivo(r, hasta));
+}
+
+function poblacionEnRango(desde, hasta) {
+  return historico()
+    .all.filter((r) => enRango(r, desde, hasta))
+    .map((r) => ({ ...r, antiguedad: antiguedadEnCorte(r, hasta), edad: edadEnCorte(r, hasta) }));
+}
+
+function isoFromDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/* Los filtros de fecha son por mes (<input type="month">, valor "YYYY-MM").
+   Internamente todo el cálculo sigue trabajando con fechas ISO completas
+   ("YYYY-MM-DD"): desde = primer día del mes, hasta = último día del mes. */
+function mesActual() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function mesesAtras(n) {
+  const d = new Date();
+  d.setMonth(d.getMonth() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function inicioDeMes(mes) {
+  return `${mes}-01`;
+}
+
+function finDeMes(mes) {
+  const [y, m] = mes.split('-').map(Number);
+  return isoFromDate(new Date(y, m, 0));
+}
+
+function monthsAgoIso(n) {
+  return inicioDeMes(mesesAtras(n));
+}
+
+function monthsBetween(desde, hasta) {
+  const start = new Date(desde + 'T00:00:00');
+  const limit = new Date(hasta + 'T00:00:00');
+  const months = [];
+  let d = new Date(start.getFullYear(), start.getMonth(), 1);
+  while (d <= limit) {
+    const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    months.push({ label: d.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' }), start: isoFromDate(d), end: isoFromDate(next) });
+    d = next;
+  }
+  return months;
+}
+
+function fmtMes(d) {
+  return d ? new Date(d + 'T00:00:00').toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }) : 'el inicio registrado';
+}
+
+function fmtRango(desde, hasta) {
+  return `${fmtMes(desde)} – ${fmtMes(hasta)}`;
+}
+
+function getRange(prefix) {
+  const desdeMes = document.getElementById(`${prefix}-desde`)?.value || '';
+  const hastaMes = document.getElementById(`${prefix}-hasta`)?.value || mesActual();
+  return {
+    desde: desdeMes ? inicioDeMes(desdeMes) : '',
+    hasta: finDeMes(hastaMes),
+  };
 }
 
 function avg(nums) {
@@ -94,11 +286,85 @@ function orderedKeys(present, order) {
   return [...known, ...extra];
 }
 
+/* Una barra en 0 no se ve — solo deja una etiqueta de eje sin información,
+   ruido puro para una vista que un directivo va a leer rápido. Se quita
+   antes de graficar (solo aplica a categorías que pueden legítimamente
+   valer 0, ej. conteos/tasas — no a promedios, donde 0 sí sería un dato real). */
+function dropZeros(labels, values) {
+  const kept = labels.map((_, i) => i).filter((i) => values[i] !== 0);
+  return { labels: kept.map((i) => labels[i]), values: kept.map((i) => values[i]) };
+}
+
+/* Igual que dropZeros pero para varias series por categoría (ej. Hombre/Mujer
+   por nivel): solo quita la categoría si TODAS las series valen 0 ahí, para
+   no romper el apilado de una categoría con datos reales en solo una serie. */
+function dropZerosMulti(labels, series) {
+  const kept = labels.map((_, i) => i).filter((i) => series.some((s) => s[i] !== 0));
+  return { labels: kept.map((i) => labels[i]), series: series.map((s) => kept.map((i) => s[i])) };
+}
+
+/* Sin hover no hay forma de ver el valor de cada rebanada de un doughnut —
+   se dibuja el conteo y el % del total directo encima de la rebanada, en vez
+   de en la leyenda. Plugin local (no global vía Chart.register) porque solo
+   aplica a los dos doughnuts de este módulo. */
+const donutValueLabels = {
+  id: 'donutValueLabels',
+  afterDatasetsDraw(chart) {
+    const data = chart.data.datasets[0].data;
+    const total = data.reduce((a, b) => a + b, 0);
+    if (!total) return;
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = '700 12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    chart.getDatasetMeta(0).data.forEach((arc, i) => {
+      if (!data[i]) return;
+      const pct = Math.round((data[i] / total) * 1000) / 10;
+      const { x, y } = arc.getCenterPoint();
+      ctx.fillText(`${data[i]} (${pct}%)`, x, y);
+    });
+    ctx.restore();
+  },
+};
+
+/* Igual que donutValueLabels pero para segmentos de una barra apilada al
+   100%: cada dataset trae `data` (el % que dibuja el alto del segmento) y
+   `counts` (personas reales) por separado — el texto siempre muestra la
+   persona real, no el %. Se salta segmentos angostos (<16px) donde el texto
+   no cabría — mejor nada que un texto encimado con el de al lado. */
+const stackedCountPctLabels = {
+  id: 'stackedCountPctLabels',
+  afterDatasetsDraw(chart) {
+    const { datasets } = chart.data;
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = '700 11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    datasets.forEach((ds, di) => {
+      chart.getDatasetMeta(di).data.forEach((el, i) => {
+        const count = ds.counts[i];
+        if (!count) return;
+        const { x, y, base } = el.getProps(['x', 'y', 'base'], true);
+        if (Math.abs(base - y) < 16) return;
+        ctx.fillText(`${count} (${ds.data[i]}%)`, x, (y + base) / 2);
+      });
+    });
+    ctx.restore();
+  },
+};
+
 /* ---- 1. ESTRUCTURA ORGANIZACIONAL ---- */
 function renderEstructura() {
-  const emp = activos();
+  const { desde, hasta } = getRange('estructura');
+  const emp = poblacionEnRango(desde, hasta);
+  document.getElementById('estructura-nota').textContent =
+    `Filtros aplicados: activos en algún momento entre ${fmtRango(desde, hasta)}. n=${emp.length}.`;
   document.getElementById('estructura-stats').innerHTML = `
-    <div class="stat-card" style="grid-column:1/-1"><div class="sq"></div><div class="label">Headcount total activo</div><div class="value">${emp.length}</div><div class="sub">colaboradores con Estatus = Activo</div></div>
+    <div class="stat-card" style="grid-column:1/-1"><div class="sq"></div><div class="label">Headcount en el rango</div><div class="value">${emp.length}</div><div class="sub">activos entre ${fmtRango(desde, hasta)}</div></div>
   `;
 
   const byArea = groupBy(emp, (e) => e.area);
@@ -118,10 +384,10 @@ function renderEstructura() {
   if (chartNivel) chartNivel.destroy();
   chartNivel = new Chart(document.getElementById('chart-nivel'), {
     type: 'bar',
-    data: { labels: niveles.map((n) => wrapLabel(n, 9)), datasets: [{ data: niveles.map((n) => byNivel[n].length), backgroundColor: '#4C4DF6', borderRadius: 5, maxBarThickness: 40 }] },
+    data: { labels: niveles.map((n) => wrapLabel(n, 12)), datasets: [{ data: niveles.map((n) => byNivel[n].length), backgroundColor: '#4C4DF6', borderRadius: 5, maxBarThickness: 50 }] },
     options: {
       plugins: { legend: { display: false }, tooltip: { enabled: false } },
-      scales: { x: { ticks: { maxRotation: 0, minRotation: 0, autoSkip: false, font: { size: 10 } } }, y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+      scales: { x: { ticks: { maxRotation: 0, minRotation: 0, autoSkip: false } }, y: { beginAtZero: true, ticks: { stepSize: 1 } } },
     },
   });
 
@@ -150,20 +416,41 @@ function renderEstructura() {
   chartSpanControl = new Chart(document.getElementById('chart-span-control'), {
     type: 'bar',
     data: { labels: top15.map((m) => m.nombre), datasets: [{ data: top15.map((m) => m.count), backgroundColor: '#1E9E6B', borderRadius: 5 }] },
-    options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } }, y: { ticks: { autoSkip: false } } },
+    },
   });
+}
 
-  const tbody = document.querySelector('#span-control-table tbody');
-  tbody.innerHTML = managers.length
-    ? managers.map((m) => `<tr><td><strong>${m.nombre}</strong></td><td>${m.count}</td></tr>`).join('')
-    : `<tr><td colspan="2" class="empty">Nadie tiene reportes directos registrados.</td></tr>`;
+/* Bucket específico para "Distribución de antigüedad" — el primer año se
+   parte en 0-3 y 4-11 meses (la ventana de mayor riesgo de salida temprana),
+   luego un renglón por año exacto (1 al 5) y uno final para lo que pase de
+   5, en vez de los rangos amplios de tenureBuckets() que usa Rotación. */
+function antiguedadPorAnio(values) {
+  const buckets = { '0-3 meses': 0, '4 meses-1 año': 0, '1 año': 0, '2 años': 0, '3 años': 0, '4 años': 0, '5 años': 0, '5+ años': 0 };
+  values.forEach((y) => {
+    if (y * 12 < 4) buckets['0-3 meses']++;
+    else if (y < 1) buckets['4 meses-1 año']++;
+    else if (y < 2) buckets['1 año']++;
+    else if (y < 3) buckets['2 años']++;
+    else if (y < 4) buckets['3 años']++;
+    else if (y < 5) buckets['4 años']++;
+    else if (y < 6) buckets['5 años']++;
+    else buckets['5+ años']++;
+  });
+  return buckets;
 }
 
 /* ---- 2. ANTIGÜEDAD ---- */
 function renderAntiguedad() {
-  const emp = activos().filter((e) => e.antiguedad !== null);
+  const { desde, hasta } = getRange('antiguedad');
+  const emp = poblacionEnRango(desde, hasta).filter((e) => e.antiguedad !== null);
   const avgAntig = avg(emp.map((e) => e.antiguedad));
   const menos6m = emp.filter((e) => e.antiguedad < 0.5).length;
+  document.getElementById('antiguedad-nota').textContent =
+    `Antigüedad calculada al cierre de ${fmtMes(hasta)}, o a su fecha de baja si salió antes. Filtros aplicados: ${fmtRango(desde, hasta)}. n=${emp.length}.`;
   document.getElementById('antiguedad-stats').innerHTML = `
     <div class="stat-card"><div class="sq"></div><div class="label">Antigüedad promedio</div><div class="value">${fmtYears(avgAntig)}</div><div class="sub">${emp.length} colaboradores con fecha de ingreso</div></div>
     <div class="stat-card"><div class="sq"></div><div class="label">Menos de 6 meses</div><div class="value" style="color:var(--amarillo)">${menos6m}</div><div class="sub">${emp.length ? Math.round((menos6m / emp.length) * 100) : 0}% de la plantilla</div></div>
@@ -175,7 +462,7 @@ function renderAntiguedad() {
   chartAntigArea = new Chart(document.getElementById('chart-antig-area'), {
     type: 'bar',
     data: { labels: areas, datasets: [{ data: areas.map((a) => Number(avg(byArea[a].map((e) => e.antiguedad)).toFixed(1))), backgroundColor: '#19199A', borderRadius: 5 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+    options: { plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { y: { beginAtZero: true } } },
   });
 
   const byNivel = groupBy(emp, (e) => e.nivel);
@@ -184,59 +471,78 @@ function renderAntiguedad() {
   chartAntigNivel = new Chart(document.getElementById('chart-antig-nivel'), {
     type: 'bar',
     data: { labels: niveles, datasets: [{ data: niveles.map((n) => Number(avg(byNivel[n].map((e) => e.antiguedad)).toFixed(1))), backgroundColor: '#4C4DF6', borderRadius: 5 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+    options: { plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { y: { beginAtZero: true } } },
   });
 
-  const buckets = tenureBuckets(emp.map((e) => e.antiguedad));
+  const buckets = antiguedadPorAnio(emp.map((e) => e.antiguedad));
+  const { labels: antigHistLabels, values: antigHistValues } = dropZeros(Object.keys(buckets), Object.values(buckets));
   if (chartAntigHist) chartAntigHist.destroy();
   chartAntigHist = new Chart(document.getElementById('chart-antig-hist'), {
     type: 'bar',
-    data: { labels: Object.keys(buckets), datasets: [{ data: Object.values(buckets), backgroundColor: '#EE7D38', borderRadius: 5, maxBarThickness: 60 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+    data: { labels: antigHistLabels, datasets: [{ data: antigHistValues, backgroundColor: '#EE7D38', borderRadius: 5, maxBarThickness: 60 }] },
+    options: { plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
   });
 }
 
 /* ---- 3. DEMOGRAFÍA ---- */
 function renderDemografia() {
-  const emp = activos();
+  const { desde, hasta } = getRange('demografia');
+  const emp = poblacionEnRango(desde, hasta);
+
+  document.getElementById('demografia-nota').textContent =
+    `Calculado sobre activos entre ${fmtRango(desde, hasta)}. Edad calculada al cierre de ${fmtMes(hasta)} (o a la fecha de baja si salió antes). n=${emp.length}.`;
 
   const bySexo = groupBy(emp, (e) => e.sexo || 'Sin dato');
   const sexos = Object.keys(bySexo);
   if (chartSexo) chartSexo.destroy();
   chartSexo = new Chart(document.getElementById('chart-sexo'), {
     type: 'doughnut',
+    plugins: [donutValueLabels],
     data: { labels: sexos, datasets: [{ data: sexos.map((s) => bySexo[s].length), backgroundColor: PALETTE }] },
-    options: { plugins: { legend: { position: 'bottom' } } },
+    options: { plugins: { legend: { position: 'bottom' }, tooltip: { enabled: false } } },
   });
 
   const byNivel = groupBy(emp, (e) => e.nivel);
   const niveles = orderedKeys(new Set(Object.keys(byNivel)), NIVEL_ORDEN);
+  const { labels: sexoNivelLabels, series: sexoNivelSeries } = dropZerosMulti(niveles, [
+    niveles.map((n) => byNivel[n].filter((e) => e.sexo === 'Hombre').length),
+    niveles.map((n) => byNivel[n].filter((e) => e.sexo === 'Mujer').length),
+  ]);
+  const sexoNivelTotales = sexoNivelLabels.map((_, i) => sexoNivelSeries[0][i] + sexoNivelSeries[1][i]);
+  const sexoNivelPct = sexoNivelSeries.map((serie) => serie.map((v, i) => (sexoNivelTotales[i] ? Math.round((v / sexoNivelTotales[i]) * 1000) / 10 : 0)));
   if (chartSexoNivel) chartSexoNivel.destroy();
   chartSexoNivel = new Chart(document.getElementById('chart-sexo-nivel'), {
     type: 'bar',
+    plugins: [stackedCountPctLabels],
     data: {
-      labels: niveles,
+      labels: sexoNivelLabels,
       datasets: [
-        { label: 'Hombre', data: niveles.map((n) => byNivel[n].filter((e) => e.sexo === 'Hombre').length), backgroundColor: '#19199A', borderRadius: 4 },
-        { label: 'Mujer', data: niveles.map((n) => byNivel[n].filter((e) => e.sexo === 'Mujer').length), backgroundColor: '#EE7D38', borderRadius: 4 },
+        { label: 'Hombre', data: sexoNivelPct[0], counts: sexoNivelSeries[0], backgroundColor: '#19199A', borderRadius: 4 },
+        { label: 'Mujer', data: sexoNivelPct[1], counts: sexoNivelSeries[1], backgroundColor: '#EE7D38', borderRadius: 4 },
       ],
     },
-    options: { plugins: { legend: { display: true, position: 'bottom' } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } },
+    options: {
+      plugins: { legend: { display: true, position: 'bottom' }, tooltip: { enabled: false }, valueLabels: false },
+      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, max: 100, ticks: { callback: (v) => v + '%' } } },
+    },
   });
 
   const conEdad = emp.filter((e) => e.edad !== null);
-  const edadBuckets = { '<25': 0, '25-30': 0, '30-35': 0, '35+': 0 };
+  const edadBuckets = { '<20': 0, '20-25': 0, '25-30': 0, '30-35': 0, '35-40': 0, '40+': 0 };
   conEdad.forEach((e) => {
-    if (e.edad < 25) edadBuckets['<25']++;
+    if (e.edad < 20) edadBuckets['<20']++;
+    else if (e.edad < 25) edadBuckets['20-25']++;
     else if (e.edad < 30) edadBuckets['25-30']++;
     else if (e.edad < 35) edadBuckets['30-35']++;
-    else edadBuckets['35+']++;
+    else if (e.edad < 40) edadBuckets['35-40']++;
+    else edadBuckets['40+']++;
   });
+  const { labels: edadHistLabels, values: edadHistValues } = dropZeros(Object.keys(edadBuckets), Object.values(edadBuckets));
   if (chartEdadHist) chartEdadHist.destroy();
   chartEdadHist = new Chart(document.getElementById('chart-edad-hist'), {
     type: 'bar',
-    data: { labels: Object.keys(edadBuckets), datasets: [{ data: Object.values(edadBuckets), backgroundColor: '#1E9E6B', borderRadius: 5, maxBarThickness: 60 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+    data: { labels: edadHistLabels, datasets: [{ data: edadHistValues, backgroundColor: '#1E9E6B', borderRadius: 5, maxBarThickness: 60 }] },
+    options: { plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
   });
 
   const byNivelEdad = groupBy(conEdad, (e) => e.nivel);
@@ -245,7 +551,7 @@ function renderDemografia() {
   chartEdadNivel = new Chart(document.getElementById('chart-edad-nivel'), {
     type: 'bar',
     data: { labels: nivelesEdad, datasets: [{ data: nivelesEdad.map((n) => Number(avg(byNivelEdad[n].map((e) => e.edad)).toFixed(1))), backgroundColor: '#4C4DF6', borderRadius: 5 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+    options: { plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { y: { beginAtZero: true } } },
   });
 
   const nivelesScatter = orderedKeys(new Set(conEdad.map((e) => e.nivel)), NIVEL_ORDEN);
@@ -262,7 +568,7 @@ function renderDemografia() {
       })),
     },
     options: {
-      plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } },
+      plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } }, tooltip: { enabled: false } },
       scales: { x: { title: { display: true, text: 'Edad' } }, y: { title: { display: true, text: 'Antigüedad (años)' }, beginAtZero: true } },
     },
   });
@@ -270,55 +576,168 @@ function renderDemografia() {
 
 /* ---- 4. RITMO DE CONTRATACIÓN ---- */
 function renderContrataciones() {
-  const emp = activos().filter((e) => e.fechaIngreso);
-  const now = new Date();
+  const { desde, hasta } = getRange('contrataciones');
+  const desdeEfectivo = desde || monthsAgoIso(24);
+  const { all } = historico();
+  // altas = cualquiera con fecha de ingreso en el rango, siga activo o no (antes solo contaba activos hoy y perdía a quien entró y salió dentro de la ventana)
+  const altas = all.filter((r) => r.fechaIngreso && r.fechaIngreso >= desdeEfectivo && r.fechaIngreso <= hasta);
+  document.getElementById('contrataciones-nota').textContent =
+    `Altas con fecha de ingreso entre ${fmtRango(desdeEfectivo, hasta)}. Filtros aplicados: ${fmtRango(desde, hasta)}. n=${altas.length}.`;
 
-  const months = [];
-  for (let i = 17; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push({ label: d.toLocaleDateString('es-MX', { month: 'short', year: '2-digit' }), key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` });
-  }
-  const altasPorMes = months.map((m) => emp.filter((e) => e.fechaIngreso.slice(0, 7) === m.key).length);
+  const months = monthsBetween(desdeEfectivo, hasta);
+  const altasDetallePorMes = months.map((m) => altas.filter((e) => e.fechaIngreso >= m.start && e.fechaIngreso < m.end));
+  const altasPorMes = altasDetallePorMes.map((personas) => personas.length);
   if (chartAltasMes) chartAltasMes.destroy();
   chartAltasMes = new Chart(document.getElementById('chart-altas-mes'), {
     type: 'line',
     data: { labels: months.map((m) => m.label), datasets: [{ data: altasPorMes, borderColor: '#19199A', backgroundColor: 'rgba(25,25,154,0.08)', fill: true, tension: 0.3, pointRadius: 3 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+    options: {
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: true,
+          callbacks: {
+            title: (items) => `${items[0].label} — ${altasDetallePorMes[items[0].dataIndex].length} alta(s)`,
+            label: (ctx) => {
+              const personas = altasDetallePorMes[ctx.dataIndex];
+              return personas.length ? personas.map((p) => `${p.nombre} — ${p.area}`) : 'Sin altas este mes';
+            },
+          },
+        },
+      },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+    },
   });
 
-  const desde = months[0].key + '-01';
-  const enVentana = emp.filter((e) => e.fechaIngreso >= desde);
-  const byArea = groupBy(enVentana, (e) => e.area);
+  const byArea = groupBy(altas, (e) => e.area);
   const areas = orderedKeys(new Set(Object.keys(byArea)), AREAS_ORDEN);
   if (chartAltasArea) chartAltasArea.destroy();
   chartAltasArea = new Chart(document.getElementById('chart-altas-area'), {
     type: 'bar',
     data: { labels: areas, datasets: [{ data: areas.map((a) => byArea[a].length), backgroundColor: '#EE7D38', borderRadius: 5 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+    options: { plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
   });
 
-  const ordenados = [...emp].sort((a, b) => a.fechaIngreso.localeCompare(b.fechaIngreso));
-  const cumMonths = [];
-  if (ordenados.length) {
-    const [y0, m0] = ordenados[0].fechaIngreso.slice(0, 7).split('-').map(Number);
-    let y = y0,
-      m = m0 - 1;
-    while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth())) {
-      cumMonths.push({ label: new Date(y, m, 1).toLocaleDateString('es-MX', { month: 'short', year: '2-digit' }), key: `${y}-${String(m + 1).padStart(2, '0')}` });
-      m++;
-      if (m > 11) {
-        m = 0;
-        y++;
-      }
-    }
-  }
-  const acumulado = cumMonths.map((mo) => ordenados.filter((e) => e.fechaIngreso.slice(0, 7) <= mo.key).length);
+  // crecimiento neto = headcount reconstruido al final de cada mes (altas − bajas), no solo altas acumuladas
+  const crecimiento = months.map((m) => headcountAt(m.end, all));
   if (chartCrecimientoAcumulado) chartCrecimientoAcumulado.destroy();
   chartCrecimientoAcumulado = new Chart(document.getElementById('chart-crecimiento-acumulado'), {
     type: 'line',
-    data: { labels: cumMonths.map((m) => m.label), datasets: [{ data: acumulado, borderColor: '#1E9E6B', backgroundColor: 'rgba(30,158,107,0.08)', fill: true, tension: 0.2, pointRadius: 0 }] },
-    options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 12 } }, y: { beginAtZero: true } } },
+    data: { labels: months.map((m) => m.label), datasets: [{ data: crecimiento, borderColor: '#1E9E6B', backgroundColor: 'rgba(30,158,107,0.08)', fill: true, tension: 0.2, pointRadius: 0 }] },
+    options: { plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { ticks: { maxTicksLimit: 12 } }, y: { beginAtZero: true } } },
   });
+}
+
+/* ---- ROTACIÓN ---- */
+function renderRotacion() {
+  const { desde, hasta } = getRange('rotacion');
+  const desdeEfectivo = desde || monthsAgoIso(24);
+  const { all, bajas } = historico();
+  const months = monthsBetween(desdeEfectivo, hasta);
+  const bajasRango = bajas.filter((b) => b.fecha >= desdeEfectivo && b.fecha <= hasta);
+
+  const hcInicio = headcountAt(desdeEfectivo, all);
+  const hcFin = headcountAt(hasta, all);
+  const hcProm = (hcInicio + hcFin) / 2;
+  const tasa = hcProm ? (bajasRango.length / hcProm) * 100 : null;
+
+  const voluntarias = bajasRango.filter((b) => b.tipo === 'Voluntaria').length;
+  const involuntarias = bajasRango.filter((b) => b.tipo === 'Involuntaria').length;
+  const tasaVoluntaria = hcProm ? (voluntarias / hcProm) * 100 : null;
+  const tasaInvoluntaria = hcProm ? (involuntarias / hcProm) * 100 : null;
+
+  const conAntiguedad = bajasRango.filter((b) => b.fechaIngreso).map((b) => tenureYears(b.fechaIngreso, b.fecha));
+
+  document.getElementById('rotacion-nota').textContent =
+    `Tasa = bajas del periodo / headcount promedio del periodo (headcount al inicio + headcount al final, entre 2). Filtros aplicados: ${fmtRango(desdeEfectivo, hasta)}. n=${bajasRango.length} bajas.`;
+  document.getElementById('rotacion-stats').innerHTML = `
+    <div class="stat-card"><div class="sq"></div><div class="label">Rotación del periodo</div><div class="value">${tasa === null ? '—' : tasa.toFixed(1) + '%'}</div><div class="sub">${bajasRango.length} bajas / headcount prom. ${hcProm.toFixed(1)}</div></div>
+    <div class="stat-card"><div class="sq"></div><div class="label">Rotación voluntaria</div><div class="value">${tasaVoluntaria === null ? '—' : tasaVoluntaria.toFixed(1) + '%'}</div><div class="sub">${voluntarias} bajas voluntarias</div></div>
+    <div class="stat-card"><div class="sq"></div><div class="label">Rotación involuntaria</div><div class="value">${tasaInvoluntaria === null ? '—' : tasaInvoluntaria.toFixed(1) + '%'}</div><div class="sub">${involuntarias} bajas involuntarias</div></div>
+  `;
+
+  const bajasDetallePorMes = months.map((m) => bajasRango.filter((b) => b.fecha >= m.start && b.fecha < m.end));
+  const hcPromPorMes = months.map((m) => (headcountAt(m.start, all) + headcountAt(m.end, all)) / 2);
+  const tasaPorMes = months.map((m, i) => (hcPromPorMes[i] ? Number(((bajasDetallePorMes[i].length / hcPromPorMes[i]) * 100).toFixed(1)) : 0));
+  if (chartRotacionMensual) chartRotacionMensual.destroy();
+  chartRotacionMensual = new Chart(document.getElementById('chart-rotacion-mensual'), {
+    type: 'line',
+    data: { labels: months.map((m) => m.label), datasets: [{ data: tasaPorMes, borderColor: '#D64545', backgroundColor: 'rgba(214,69,69,0.08)', fill: true, tension: 0.3, pointRadius: 3 }] },
+    options: {
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          enabled: true,
+          callbacks: {
+            title: (items) => `${items[0].label} — HC prom. ${hcPromPorMes[items[0].dataIndex].toFixed(1)}`,
+            label: (ctx) => {
+              const personas = bajasDetallePorMes[ctx.dataIndex];
+              return personas.length ? personas.map((p) => `${p.nombre} — ${p.area}`) : 'Sin bajas este mes';
+            },
+          },
+        },
+        valueLabels: { suffix: '%' },
+      },
+      scales: { y: { beginAtZero: true, ticks: { callback: (v) => v + '%' } } },
+    },
+  });
+
+  const areasAll = orderedKeys(new Set(all.map((r) => r.area)), AREAS_ORDEN);
+  const rotacionAreaAll = areasAll.map((a) => {
+    const bajasArea = bajasRango.filter((b) => b.area === a).length;
+    const prom = (headcountAt(desdeEfectivo, all, (r) => r.area === a) + headcountAt(hasta, all, (r) => r.area === a)) / 2;
+    return prom ? Number(((bajasArea / prom) * 100).toFixed(1)) : 0;
+  });
+  const { labels: rotacionAreaLabels, values: rotacionAreaValues } = dropZeros(areasAll.map(wrapLabel), rotacionAreaAll);
+  if (chartRotacionArea) chartRotacionArea.destroy();
+  chartRotacionArea = new Chart(document.getElementById('chart-rotacion-area'), {
+    type: 'bar',
+    data: { labels: rotacionAreaLabels, datasets: [{ data: rotacionAreaValues, backgroundColor: '#D64545', borderRadius: 5 }] },
+    options: {
+      plugins: { legend: { display: false }, tooltip: { enabled: false }, valueLabels: { suffix: '%' } },
+      scales: { x: { ticks: { maxRotation: 0, minRotation: 0, autoSkip: false } }, y: { beginAtZero: true, ticks: { callback: (v) => v + '%' } } },
+    },
+  });
+
+  if (chartTipoBaja) chartTipoBaja.destroy();
+  chartTipoBaja = new Chart(document.getElementById('chart-tipo-baja'), {
+    type: 'doughnut',
+    plugins: [donutValueLabels],
+    data: { labels: ['Voluntaria', 'Involuntaria'], datasets: [{ data: [voluntarias, involuntarias], backgroundColor: ['#19199A', '#D64545'] }] },
+    options: { plugins: { legend: { position: 'bottom' }, tooltip: { enabled: false } } },
+  });
+
+  const conMotivo = bajasRango.filter((b) => b.motivo && b.motivo.toUpperCase() !== 'NA');
+  const sinMotivo = bajasRango.length - conMotivo.length;
+  const byMotivo = groupBy(conMotivo, (b) => b.motivo);
+  const motivosOrdenados = Object.entries(byMotivo).sort((a, b) => b[1].length - a[1].length);
+  if (chartMotivos) chartMotivos.destroy();
+  chartMotivos = new Chart(document.getElementById('chart-motivos'), {
+    type: 'bar',
+    data: { labels: motivosOrdenados.map(([m]) => wrapLabel(m, 22)), datasets: [{ data: motivosOrdenados.map(([, v]) => v.length), backgroundColor: '#4C4DF6', borderRadius: 5 }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+  });
+  document.getElementById('rotacion-motivos-nota').textContent = sinMotivo
+    ? `${sinMotivo} baja(s) sin motivo registrado en el Sheet (excluidas de la gráfica de motivos).`
+    : '';
+
+  const buckets = tenureBuckets(conAntiguedad);
+  const { labels: antigBajaLabels, values: antigBajaValues } = dropZeros(Object.keys(buckets), Object.values(buckets));
+  if (chartAntiguedadBaja) chartAntiguedadBaja.destroy();
+  chartAntiguedadBaja = new Chart(document.getElementById('chart-antiguedad-baja'), {
+    type: 'bar',
+    data: { labels: antigBajaLabels, datasets: [{ data: antigBajaValues, backgroundColor: '#E0A61A', borderRadius: 5, maxBarThickness: 60 }] },
+    options: { plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+  });
+
+  const byNivel = groupBy(bajasRango, (b) => b.nivel);
+  const nivelesTabla = orderedKeys(new Set(Object.keys(byNivel)), NIVEL_ORDEN);
+  const tbodyNivel = document.querySelector('#rotacion-nivel-table tbody');
+  tbodyNivel.innerHTML = nivelesTabla.length
+    ? nivelesTabla.map((n) => `<tr><td><strong>${n}</strong></td><td>${byNivel[n].length}</td></tr>`).join('')
+    : `<tr><td colspan="2" class="empty">Sin bajas registradas con fecha en este rango.</td></tr>`;
 }
 
 /* ---- 5. CALIDAD DE DATOS ---- */
@@ -342,14 +761,17 @@ function renderCalidad() {
 
 /* ---- 6. CRUCES ESTRATÉGICOS ---- */
 function renderCruces() {
-  const emp = activos();
+  const { desde, hasta } = getRange('cruces');
+  const emp = poblacionEnRango(desde, hasta);
+  document.getElementById('cruces-nota').textContent =
+    `Señales calculadas sobre activos entre ${fmtRango(desde, hasta)}. n=${emp.length}.`;
   const lideres = emp.filter((e) => LIDERES.has(e.nivel)).length;
   const resto = emp.length - lideres;
   if (chartLideres) chartLideres.destroy();
   chartLideres = new Chart(document.getElementById('chart-lideres'), {
     type: 'bar',
     data: { labels: ['Líderes (Manager/Jr Manager/Executive)', 'Colaboradores'], datasets: [{ data: [lideres, resto], backgroundColor: ['#19199A', '#E8E7E7'], borderRadius: 5 }] },
-    options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+    options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } },
   });
 
   const byId = Object.fromEntries(emp.map((e) => [e.id, e]));

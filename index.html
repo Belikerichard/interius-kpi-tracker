@@ -28,7 +28,7 @@
             if (meta.hidden) return;
             meta.data.forEach((el, index) => {
               const value = dataset.data[index];
-              if (value === null || value === undefined || value === '') return;
+              if (value === null || value === undefined || value === '' || value === 0) return;
               const label = typeof value === 'number' ? `${Math.round(value * 10) / 10}${suffix}` : value;
               const { x, y } = el.getProps(['x', 'y'], true);
               if (horizontal) {
@@ -52,7 +52,7 @@
     <!-- ===================== LOGIN ===================== -->
     <div class="login-screen" id="view-login">
       <div class="login-card">
-        <div class="brand" style="justify-content: center"><span class="bracket">[</span> Interius <span class="bracket">]</span></div>
+        <div class="brand brand-login"><img src="assets/interius-logo-white.png" alt="Interius" class="brand-logo" /></div>
         <p>Inicia sesión con tu cuenta de Google para entrar al KPI Tracker.</p>
         <div id="g-signin-button"></div>
         <div class="login-denied" id="login-denied" style="display: none">
@@ -65,7 +65,7 @@
 
     <div class="app" id="app-shell" style="display: none">
       <div class="sidebar">
-        <div class="brand"><span class="bracket">[</span> Interius <span class="bracket">]</span></div>
+        <div class="brand"><img src="assets/interius-logo-white.png" alt="Interius" class="brand-logo" /></div>
         <div class="navbtn active" data-view="dashboard">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="7" height="9" />
@@ -262,38 +262,158 @@
             <div class="subtab" data-subtab="antiguedad">Antigüedad</div>
             <div class="subtab" data-subtab="demografia">Demografía</div>
             <div class="subtab" data-subtab="contrataciones">Contrataciones</div>
+            <div class="subtab" data-subtab="rotacion">Rotación</div>
             <div class="subtab" data-subtab="calidad">Calidad de datos</div>
             <div class="subtab" data-subtab="cruces">Cruces estratégicos</div>
           </div>
 
           <!-- ---- ESTRUCTURA ORGANIZACIONAL ---- -->
           <div class="subview active" id="subview-estructura">
-            <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px">Solo colaboradores con Estatus = Activo.</p>
+            <div class="filters-row">
+              <span style="font-size: 12.5px; color: #6b6b80; font-weight: 600">Desde</span>
+              <input type="month" class="filter-input" id="estructura-desde" />
+              <span style="font-size: 12.5px; color: #6b6b80; font-weight: 600">Hasta</span>
+              <input type="month" class="filter-input" id="estructura-hasta" />
+            </div>
+            <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px" id="estructura-nota"></p>
             <div class="cards-row" id="estructura-stats"></div>
-            <div class="grid-2">
-              <div class="panel">
-                <h3><span class="bracket-mini">[</span> Headcount por área <span class="bracket-mini">]</span></h3>
-                <canvas id="chart-area" height="220"></canvas>
-              </div>
-              <div class="panel">
-                <h3><span class="bracket-mini">[</span> Headcount por nivel de puesto <span class="bracket-mini">]</span></h3>
-                <canvas id="chart-nivel" height="220"></canvas>
-              </div>
+            <div class="panel">
+              <h3>Headcount por área</h3>
+              <canvas id="chart-area" height="200"></canvas>
             </div>
             <div class="panel">
-              <h3><span class="bracket-mini">[</span> Pirámide organizacional <span class="bracket-mini">]</span></h3>
+              <h3>Headcount por nivel de puesto</h3>
+              <canvas id="chart-nivel" height="240"></canvas>
+            </div>
+            <div class="panel">
+              <h3>Pirámide organizacional</h3>
               <canvas id="chart-piramide" height="200"></canvas>
             </div>
             <div class="panel">
-              <h3><span class="bracket-mini">[</span> Span of control (top 15 managers) <span class="bracket-mini">]</span></h3>
-              <canvas id="chart-span-control" height="220"></canvas>
+              <h3>Span of control (top 15 managers)</h3>
+              <canvas id="chart-span-control" height="420"></canvas>
+            </div>
+          </div>
+
+          <!-- ---- ANTIGÜEDAD ---- -->
+          <div class="subview" id="subview-antiguedad">
+            <div class="filters-row">
+              <span style="font-size: 12.5px; color: #6b6b80; font-weight: 600">Desde</span>
+              <input type="month" class="filter-input" id="antiguedad-desde" />
+              <span style="font-size: 12.5px; color: #6b6b80; font-weight: 600">Hasta</span>
+              <input type="month" class="filter-input" id="antiguedad-hasta" />
+            </div>
+            <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px" id="antiguedad-nota"></p>
+            <div class="cards-row" id="antiguedad-stats"></div>
+            <div class="panel">
+              <h3>Antigüedad promedio por área</h3>
+              <canvas id="chart-antig-area" height="200"></canvas>
+            </div>
+            <div class="panel">
+              <h3>Antigüedad promedio por nivel</h3>
+              <canvas id="chart-antig-nivel" height="240"></canvas>
+            </div>
+            <div class="panel">
+              <h3>Distribución de antigüedad</h3>
+              <canvas id="chart-antig-hist" height="200"></canvas>
+            </div>
+          </div>
+
+          <!-- ---- DEMOGRAFÍA ---- -->
+          <div class="subview" id="subview-demografia">
+            <div class="filters-row">
+              <span style="font-size: 12.5px; color: #6b6b80; font-weight: 600">Desde</span>
+              <input type="month" class="filter-input" id="demografia-desde" />
+              <span style="font-size: 12.5px; color: #6b6b80; font-weight: 600">Hasta</span>
+              <input type="month" class="filter-input" id="demografia-hasta" />
+            </div>
+            <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px" id="demografia-nota"></p>
+            <div class="panel">
+              <h3>Distribución por sexo</h3>
+              <canvas id="chart-sexo" height="200"></canvas>
+            </div>
+            <div class="panel">
+              <h3>Sexo por nivel de puesto</h3>
+              <canvas id="chart-sexo-nivel" height="240"></canvas>
+            </div>
+            <div class="panel">
+              <h3>Distribución de edad</h3>
+              <canvas id="chart-edad-hist" height="200"></canvas>
+            </div>
+            <div class="panel">
+              <h3>Edad promedio por nivel</h3>
+              <canvas id="chart-edad-nivel" height="240"></canvas>
+            </div>
+            <div class="panel">
+              <h3>Edad vs antigüedad por nivel</h3>
+              <canvas id="chart-edad-antiguedad" height="220"></canvas>
+            </div>
+          </div>
+
+          <!-- ---- RITMO DE CONTRATACIÓN ---- -->
+          <div class="subview" id="subview-contrataciones">
+            <div class="filters-row">
+              <span style="font-size: 12.5px; color: #6b6b80; font-weight: 600">Desde</span>
+              <input type="month" class="filter-input" id="contrataciones-desde" />
+              <span style="font-size: 12.5px; color: #6b6b80; font-weight: 600">Hasta</span>
+              <input type="month" class="filter-input" id="contrataciones-hasta" />
+            </div>
+            <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px" id="contrataciones-nota"></p>
+            <div class="panel">
+              <h3>Altas por mes</h3>
+              <canvas id="chart-altas-mes" height="200"></canvas>
+            </div>
+            <div class="panel">
+              <h3>Altas por área</h3>
+              <canvas id="chart-altas-area" height="200"></canvas>
+            </div>
+            <div class="panel">
+              <h3>Crecimiento acumulado de headcount activo</h3>
+              <canvas id="chart-crecimiento-acumulado" height="200"></canvas>
+            </div>
+          </div>
+
+          <!-- ---- ROTACIÓN ---- -->
+          <div class="subview" id="subview-rotacion">
+            <div class="filters-row">
+              <span style="font-size: 12.5px; color: #6b6b80; font-weight: 600">Desde</span>
+              <input type="month" class="filter-input" id="rotacion-desde" />
+              <span style="font-size: 12.5px; color: #6b6b80; font-weight: 600">Hasta</span>
+              <input type="month" class="filter-input" id="rotacion-hasta" />
+            </div>
+            <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px" id="rotacion-nota"></p>
+            <div class="cards-row" id="rotacion-stats"></div>
+            <div class="panel">
+              <h3>Rotación mensual</h3>
+              <canvas id="chart-rotacion-mensual" height="200"></canvas>
+            </div>
+            <div class="panel">
+              <h3>Rotación por área</h3>
+              <canvas id="chart-rotacion-area" height="220"></canvas>
+            </div>
+            <div class="grid-2">
+              <div class="panel">
+                <h3>Voluntaria vs. involuntaria</h3>
+                <canvas id="chart-tipo-baja" height="220"></canvas>
+              </div>
+              <div class="panel">
+                <h3>Antigüedad al momento de la baja</h3>
+                <canvas id="chart-antiguedad-baja" height="220"></canvas>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Motivos de baja más frecuentes</h3>
+              <canvas id="chart-motivos" height="200"></canvas>
+              <p style="margin: 10px 0 0; color: #6b6b80; font-size: 12px" id="rotacion-motivos-nota"></p>
             </div>
             <div class="panel" style="padding: 0">
-              <table id="span-control-table">
+              <h3 style="padding: 16px 16px 0">Bajas por nivel de puesto</h3>
+              <p style="margin: 4px 16px 12px; color: #6b6b80; font-size: 12px">Conteo, no tasa: no hay historial de headcount por nivel para un denominador confiable.</p>
+              <table id="rotacion-nivel-table">
                 <thead>
                   <tr>
-                    <th>Manager</th>
-                    <th>Reportes directos</th>
+                    <th>Nivel de puesto</th>
+                    <th>Bajas</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -301,76 +421,11 @@
             </div>
           </div>
 
-          <!-- ---- ANTIGÜEDAD ---- -->
-          <div class="subview" id="subview-antiguedad">
-            <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px">Antigüedad de la plantilla activa desde su fecha de ingreso.</p>
-            <div class="cards-row" id="antiguedad-stats"></div>
-            <div class="grid-2">
-              <div class="panel">
-                <h3><span class="bracket-mini">[</span> Antigüedad promedio por área <span class="bracket-mini">]</span></h3>
-                <canvas id="chart-antig-area" height="220"></canvas>
-              </div>
-              <div class="panel">
-                <h3><span class="bracket-mini">[</span> Antigüedad promedio por nivel <span class="bracket-mini">]</span></h3>
-                <canvas id="chart-antig-nivel" height="220"></canvas>
-              </div>
-            </div>
-            <div class="panel">
-              <h3><span class="bracket-mini">[</span> Distribución de antigüedad <span class="bracket-mini">]</span></h3>
-              <canvas id="chart-antig-hist" height="200"></canvas>
-            </div>
-          </div>
-
-          <!-- ---- DEMOGRAFÍA ---- -->
-          <div class="subview" id="subview-demografia">
-            <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px">Composición demográfica de la plantilla activa.</p>
-            <div class="grid-2">
-              <div class="panel">
-                <h3><span class="bracket-mini">[</span> Distribución por sexo <span class="bracket-mini">]</span></h3>
-                <canvas id="chart-sexo" height="220"></canvas>
-              </div>
-              <div class="panel">
-                <h3><span class="bracket-mini">[</span> Sexo por nivel de puesto <span class="bracket-mini">]</span></h3>
-                <canvas id="chart-sexo-nivel" height="220"></canvas>
-              </div>
-            </div>
-            <div class="grid-2">
-              <div class="panel">
-                <h3><span class="bracket-mini">[</span> Distribución de edad <span class="bracket-mini">]</span></h3>
-                <canvas id="chart-edad-hist" height="220"></canvas>
-              </div>
-              <div class="panel">
-                <h3><span class="bracket-mini">[</span> Edad promedio por nivel <span class="bracket-mini">]</span></h3>
-                <canvas id="chart-edad-nivel" height="220"></canvas>
-              </div>
-            </div>
-            <div class="panel">
-              <h3><span class="bracket-mini">[</span> Edad vs antigüedad por nivel <span class="bracket-mini">]</span></h3>
-              <canvas id="chart-edad-antiguedad" height="220"></canvas>
-            </div>
-          </div>
-
-          <!-- ---- RITMO DE CONTRATACIÓN ---- -->
-          <div class="subview" id="subview-contrataciones">
-            <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px">
-              Contrataciones de colaboradores que siguen activos hoy (últimos 18 meses).
-            </p>
-            <div class="panel">
-              <h3><span class="bracket-mini">[</span> Altas por mes <span class="bracket-mini">]</span></h3>
-              <canvas id="chart-altas-mes" height="200"></canvas>
-            </div>
-            <div class="panel">
-              <h3><span class="bracket-mini">[</span> Altas por área <span class="bracket-mini">]</span></h3>
-              <canvas id="chart-altas-area" height="200"></canvas>
-            </div>
-            <div class="panel">
-              <h3><span class="bracket-mini">[</span> Crecimiento acumulado de headcount activo <span class="bracket-mini">]</span></h3>
-              <canvas id="chart-crecimiento-acumulado" height="200"></canvas>
-            </div>
-          </div>
-
           <!-- ---- CALIDAD DE DATOS ---- -->
           <div class="subview" id="subview-calidad">
+            <p style="margin: 0 0 4px; color: #9a9ab0; font-size: 12px">
+              Sin filtro de fecha: esta vista audita el estado actual del Sheet, no tiene sentido histórico.
+            </p>
             <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px" id="calidad-nota"></p>
             <div class="cards-row" id="calidad-stats"></div>
             <div class="panel" style="padding: 0">
@@ -388,19 +443,23 @@
 
           <!-- ---- CRUCES ESTRATÉGICOS ---- -->
           <div class="subview" id="subview-cruces">
-            <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px">
-              Señales de riesgo de sucesión y de estancamiento en la plantilla activa.
-            </p>
+            <div class="filters-row">
+              <span style="font-size: 12.5px; color: #6b6b80; font-weight: 600">Desde</span>
+              <input type="month" class="filter-input" id="cruces-desde" />
+              <span style="font-size: 12.5px; color: #6b6b80; font-weight: 600">Hasta</span>
+              <input type="month" class="filter-input" id="cruces-hasta" />
+            </div>
+            <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px" id="cruces-nota"></p>
             <div class="panel">
-              <h3><span class="bracket-mini">[</span> Líderes vs colaboradores <span class="bracket-mini">]</span></h3>
+              <h3>Líderes vs colaboradores</h3>
               <canvas id="chart-lideres" height="180"></canvas>
             </div>
             <div class="panel">
-              <h3><span class="bracket-mini">[</span> Riesgo de sucesión: managers sin Consultant/Sr Consultant debajo <span class="bracket-mini">]</span></h3>
+              <h3>Riesgo de sucesión: managers sin Consultant/Sr Consultant debajo</h3>
               <div id="sucesion-alert"></div>
             </div>
             <div class="panel">
-              <h3><span class="bracket-mini">[</span> Posible estancamiento: 2+ años en Specialist/Jr <span class="bracket-mini">]</span></h3>
+              <h3>Posible estancamiento: 2+ años en Specialist/Jr</h3>
               <div id="estancamiento-alert"></div>
             </div>
           </div>

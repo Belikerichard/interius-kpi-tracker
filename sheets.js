@@ -106,6 +106,7 @@ export async function loadEmpleadosFromSheet(sheetId) {
     const puesto = correctPuesto(r['Puesto Completo']);
     const area = collapseSpaces(r['Area']) || 'Sin área';
     const fechaIngreso = toIsoDate(r['Fecha de Contratación']);
+    const fechaNacimiento = toIsoDate(r['Fecha de Nacimiento']);
 
     if (r['Estatus'] === 'Activo') {
       const nivelPuestoRaw = collapseSpaces(r['Nivel de Puesto']);
@@ -127,6 +128,7 @@ export async function loadEmpleadosFromSheet(sheetId) {
         nivelPuesto,
         sexo: r['Sexo'] || null,
         edad: Number.isFinite(edad) ? edad : null,
+        fechaNacimiento,
         fechaIngreso,
         fechaPuesto: fechaIngreso, // el Sheet no registra fecha de cambio de puesto
         reportsTo: nameToId.get(normalizeName(r['Reporta a:'] || '')) || null,
@@ -143,12 +145,17 @@ export async function loadEmpleadosFromSheet(sheetId) {
     } else {
       const fecha = toIsoDate(r['Fecha de Baja']);
       if (fecha) {
+        const nivelPuestoRaw = collapseSpaces(r['Nivel de Puesto']);
         bajas.push({
           id: `baja-${id}`,
           empleado: nombre,
           area,
+          nivelPuesto: NIVEL_INDEFINIDO.has(nivelPuestoRaw) ? null : nivelPuestoRaw,
+          sexo: r['Sexo'] || null,
+          reportsTo: nameToId.get(normalizeName(r['Reporta a:'] || '')) || null,
           fecha,
-          fechaIngreso, // para reconstruir headcount histórico si hiciera falta
+          fechaNacimiento,
+          fechaIngreso, // para reconstruir headcount/estructura histórica (filtro de fechas de People Analytics)
           tipo: r['Tipo de Baja'] === 'Involuntaria' ? 'Involuntaria' : 'Voluntaria',
           motivo: r['Motivo de Baja'] || '',
         });
