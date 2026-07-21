@@ -57,16 +57,19 @@ Estas tres tablas ya **no** viven en `/data` — se leen en vivo de la pestaña
   (`.../export?format=csv`). Si lo vuelves a poner privado, la app deja de
   poder leerlo.
 - Columnas que usa: `INTERIUS ID`, `Nombre Completo`, `Puesto Completo`,
-  `Nivel de Puesto`, `Reporta a:`, `Sexo`, `Edad`, `Fecha de Contratación`,
-  `Estatus` (`Activo` / `Inactivo`), `Tipo de Baja`, `Motivo de Baja`, `Fecha
-  de Baja`, `Correo`.
-- El Sheet **no tiene columna "Área"**: se deriva en `sheets.js`
-  (`deriveArea`) a partir del prefijo de `Puesto Completo` (ej. "SEO
-  Consultant" → SEO). Lo que no matchea ningún prefijo conocido cae en
-  "Dirección/Otra".
+  `Nivel de Puesto`, `Area`, `Reporta a:`, `Sexo`, `Edad`, `Fecha de
+  Contratación`, `Estatus` (`Activo` / `Inactivo`), `Tipo de Baja`, `Motivo
+  de Baja`, `Fecha de Baja`, `Correo`.
+- `Area` es texto libre capturado en el Sheet (no se deriva de nada). Vacío
+  cae en "Sin área" (ej. el CEO, que no pertenece a un área) y se marca en
+  `dataQuality.incompletos`. `js/views/people.js` tiene un orden preferido
+  (`AREAS_ORDEN`) para las gráficas, pero cualquier valor nuevo que no esté
+  en esa lista igual se muestra (al final, en vez de desaparecer) — así que
+  agregar/renombrar áreas en el Sheet no rompe nada, aunque para que respete
+  el orden hay que sumarlas ahí también.
 - `sheets.js` también corrige typos conocidos de `Puesto Completo`
-  (`PUESTO_FIXES`) y colapsa espacios extra en nombre/puesto antes de derivar
-  el área o mostrar el dato.
+  (`PUESTO_FIXES`) y colapsa espacios extra en nombre/puesto/área antes de
+  mostrar el dato.
 - Filas con `Nombre Completo` en blanco se ignoran (y se cuentan en
   `dataQuality.excluidos` si su `Estatus` era `Activo`). Filas `Activo`
   alimentan Equipo/Organigrama/People Analytics; filas `Inactivo` con `Fecha

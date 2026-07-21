@@ -87,25 +87,6 @@ function correctPuesto(puesto) {
   return PUESTO_FIXES[clean] || clean;
 }
 
-/* El Sheet no tiene columna de Área: se deriva del prefijo del puesto ya
-   corregido. Cualquier puesto que no matchee (ej. "Admin & Ops Executive",
-   o vacío) cae en el catch-all "Dirección/Otra". */
-const AREA_RULES = [
-  [/^SEO/, 'SEO'],
-  [/^(Paid Media|Social Media)/, 'Paid Media'],
-  [/^Inbound Marketing/, 'Inbound'],
-  [/^(Digital Strategy|Strategic Performance & Business Intelligence|Data & AI Specialist|Martech Consultant|Digital Performance and Strategic Analyst)/, 'Estrategia/BI'],
-  [/^(HR Executive|Office & HR Jr Manager|People Development Executive)/, 'Capital Humano'],
-  [/^Graphic Designer/, 'Diseño'],
-  [/^(Full Stack Developer|Web Developer)/, 'Desarrollo'],
-  [/^UX/, 'UX'],
-];
-
-function deriveArea(puestoCorregido) {
-  const rule = AREA_RULES.find(([re]) => re.test(puestoCorregido));
-  return rule ? rule[1] : 'Dirección/Otra';
-}
-
 const NIVEL_INDEFINIDO = new Set(['', 'Por Definir']);
 
 export async function loadEmpleadosFromSheet(sheetId) {
@@ -123,7 +104,7 @@ export async function loadEmpleadosFromSheet(sheetId) {
     const id = r['INTERIUS ID'];
     const nombre = collapseSpaces(r['Nombre Completo']);
     const puesto = correctPuesto(r['Puesto Completo']);
-    const area = deriveArea(puesto);
+    const area = collapseSpaces(r['Area']) || 'Sin área';
     const fechaIngreso = toIsoDate(r['Fecha de Contratación']);
 
     if (r['Estatus'] === 'Activo') {
@@ -155,6 +136,7 @@ export async function loadEmpleadosFromSheet(sheetId) {
         !nivelPuesto && 'Nivel de Puesto',
         !edad && 'Edad',
         !puesto && 'Puesto',
+        area === 'Sin área' && 'Área',
         !fechaIngreso && 'Fecha de Contratación',
       ].filter(Boolean);
       if (camposFaltantes.length) incompletos.push({ id, nombre, campos: camposFaltantes });
