@@ -1,5 +1,7 @@
 [
   { "email": "ricardomunoz@interius.com.mx", "role": "super_admin" },
   { "email": "marcelo@interius.com.mx", "role": "super_admin" },
-  { "email": "sofiaelizondo@interius.com.mx", "role": "super_admin" }
+  { "email": "sofiaelizondo@interius.com.mx", "role": "super_admin" },
+  { "email": "alejandracastro@interius.com.mx", "role": "super_admin" },
+  { "email": "paulinavillarreal@interius.com.mx", "role": "super_admin" }
 ]
