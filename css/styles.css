@@ -315,6 +315,23 @@ body {
   min-height: 0;
   width: 100% !important;
 }
+/* Chart.js mide el alto disponible leyendo el padding del .panel, no el
+   espacio real que le deja el h3 dentro del flexbox — con canvas como
+   flex item directo, calcula un canvas.height más alto del que realmente
+   ocupa en pantalla y la leyenda clickeable (chart-edad-antiguedad) queda
+   desalineada. Un wrapper con position:relative como flex item, y el
+   canvas absoluto llenándolo, le da a Chart.js un tamaño ya resuelto. */
+.chart-box {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.chart-box canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
 
 .grid-2 {
   display: grid;
