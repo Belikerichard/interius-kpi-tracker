@@ -610,13 +610,16 @@ input[type='number'] {
   display: flex;
   gap: 28px;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: safe center;
 }
 .org-node {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+.org-level .org-card2 {
+  flex: 1;
 }
 .org-connector {
   width: 1px;

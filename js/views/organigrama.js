@@ -128,7 +128,7 @@ function renderFocusView(focusId, roots, childrenMap, personaById, empleadoById,
 
 const CARD_DIMS = {
   lg: { avatar: 68, width: 200, font: 20, minHeight: 236 },
-  md: { avatar: 52, width: 168, font: 16, minHeight: 200 },
+  md: { avatar: 44, width: 150, font: 14, minHeight: 172 },
   xs: { avatar: 20, width: 86, font: 9, minHeight: 0 },
 };
 
