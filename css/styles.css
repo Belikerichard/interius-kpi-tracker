@@ -695,34 +695,81 @@ input[type='number'] {
 .org-tree {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
   align-items: flex-start;
   padding: 8px 4px 24px;
 }
+.org-card2-xs {
+  padding: 5px 6px 5px;
+  border-radius: 8px;
+}
+.org-card2-xs .org-name {
+  font-size: 9.5px;
+  line-height: 1.2;
+  margin-top: 0;
+}
+
+/* Árbol con líneas de conexión (padre→hijos): técnica clásica solo-CSS,
+   cada .org-branch dibuja su propio tramo horizontal (mitad izq/der con
+   ::before/::after) y el tramo vertical hacia sus hijos lo pone
+   .org-children::before — sin JS ni SVG. */
 .org-branch {
   display: flex;
   flex-direction: column;
   align-items: center;
+  position: relative;
+  padding-top: 16px;
+}
+.org-tree > .org-branch {
+  padding-top: 0;
+}
+.org-branch::before,
+.org-branch::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 16px;
+  border-top: 1px solid #c7c7dd;
+}
+.org-branch::before {
+  right: 50%;
+}
+.org-branch::after {
+  left: 50%;
+  border-left: 1px solid #c7c7dd;
+}
+.org-tree > .org-branch::before,
+.org-tree > .org-branch::after {
+  display: none;
+}
+.org-children > .org-branch:only-child::before,
+.org-children > .org-branch:only-child::after {
+  border-top: none;
+}
+.org-children > .org-branch:first-child::before {
+  border-top: none;
+}
+.org-children > .org-branch:last-child::after {
+  border-top: none;
 }
 .org-children {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   justify-content: center;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed #d3d3e2;
+  position: relative;
+  padding-top: 16px;
 }
-.org-card2-xs {
-  padding: 8px 8px 7px;
-}
-.org-card2-xs .org-name {
-  font-size: 11px;
-  margin-top: 1px;
-}
-.org-card2-xs .org-role {
-  font-size: 9.5px;
-  margin-top: 1px;
+.org-children::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 16px;
+  border-left: 1px solid #c7c7dd;
+  transform: translateX(-1px);
 }
 
 /* modal */

@@ -129,7 +129,7 @@ function renderFocusView(focusId, roots, childrenMap, personaById, empleadoById,
 const CARD_DIMS = {
   lg: { avatar: 68, width: 200, font: 20, minHeight: 236 },
   md: { avatar: 52, width: 168, font: 16, minHeight: 200 },
-  xs: { avatar: 30, width: 118, font: 11, minHeight: 0 },
+  xs: { avatar: 20, width: 86, font: 9, minHeight: 0 },
 };
 
 function renderCard(p, color, childrenMap, empleadoById, size, isMatch, showHint = true) {
@@ -141,10 +141,10 @@ function renderCard(p, color, childrenMap, empleadoById, size, isMatch, showHint
 
   return `<div class="org-node">
     <div class="org-card2${compact ? ' org-card2-xs' : ''}${isMatch ? ' org-match' : ''}" style="--org-color:${color};width:${dims.width}px;min-height:${dims.minHeight}px" data-orgcard="${p.id}" data-hasreports="${kids.length > 0}">
-      <div class="avatar" style="width:${dims.avatar}px;height:${dims.avatar}px;border-radius:50%;font-size:${dims.font}px;margin:0 auto 10px;background:${color}">${initials(p.name)}</div>
+      <div class="avatar" style="width:${dims.avatar}px;height:${dims.avatar}px;border-radius:50%;font-size:${dims.font}px;margin:0 auto ${compact ? 4 : 10}px;background:${color}">${initials(p.name)}</div>
       ${compact ? '' : `<div class="org-dept-label" style="color:${color}">${area || ' '}</div>`}
       <div class="org-name">${p.name}</div>
-      <div class="org-role">${p.rol || 'Sin puesto'}</div>
+      ${compact ? '' : `<div class="org-role">${p.rol || 'Sin puesto'}</div>`}
       ${!compact && count ? `<div class="badge-team" style="background:${color}1a;color:${color}">${count} ${count === 1 ? 'persona' : 'personas'}</div>` : ''}
       ${kids.length && showHint ? `<div class="org-hint" style="color:${color}">Ver equipo (${kids.length}) →</div>` : ''}
     </div>
