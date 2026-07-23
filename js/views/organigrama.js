@@ -128,10 +128,7 @@ function renderFocusView(focusId, roots, childrenMap, personaById, empleadoById,
 
   const upBtn = focus && personaById[focus.reportsTo] ? `<button type="button" class="org-up" data-orgup="${focus.reportsTo}">↑ Subir de nivel</button>` : '';
 
-  const focusHtml = focus
-    ? `<div class="org-focus">${renderCard(focus, colorOf[focus.id], childrenMap, empleadoById, 'lg', matchId === focus.id)}</div>
-       <div class="org-connector" style="background:${colorOf[focus.id]}"></div>`
-    : '';
+  const focusHtml = focus ? `<div class="org-focus">${renderCard(focus, colorOf[focus.id], childrenMap, empleadoById, 'lg', matchId === focus.id)}</div>` : '';
 
   const levelHtml = level.length
     ? `<div class="org-level">${level.map((p) => renderCard(p, colorOf[p.id], childrenMap, empleadoById, 'md', matchId === p.id)).join('')}</div>`
