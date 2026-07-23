@@ -1,59 +1,23 @@
-/* Lee la pestaña "DB Empleados" de un Google Sheet público ("Cualquiera con
-   el enlace puede ver") vía su export CSV — sin API key ni service account.
-   Deriva de ahí personas (equipo/organigrama), empleados (antigüedad) y
-   bajas: son la misma fuente, el Sheet no tiene una tabla por vista. */
+/* Lee la tabla de empleados desde BigQuery (antes era un Google Sheet
+   público vía CSV, ver historial de bigquery.js/sheets.js). Autenticado con
+   un service account cuya key vive en GOOGLE_SERVICE_ACCOUNT_JSON (.env en
+   local, variable de entorno en Vercel — nunca en el repo). Deriva de ahí
+   personas (equipo/organigrama), empleados (antigüedad) y bajas: son la
+   misma fuente, la tabla no tiene una fila por vista. */
+import { BigQuery } from '@google-cloud/bigquery';
 
-function parseCsv(text) {
-  const rows = [];
-  let row = [];
-  let field = '';
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else inQuotes = false;
-      } else field += c;
-    } else if (c === '"') {
-      inQuotes = true;
-    } else if (c === ',') {
-      row.push(field);
-      field = '';
-    } else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = '';
-    } else field += c;
-  }
-  if (field.length || row.length) {
-    row.push(field);
-    rows.push(row);
-  }
+let bigquery;
+function client() {
+  if (!bigquery) bigquery = new BigQuery({ credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON) });
+  return bigquery;
+}
+
+async function fetchEmpleadosTable(table) {
+  const [rows] = await client().query({ query: `SELECT * FROM \`${table}\`` });
   return rows;
 }
 
-function csvToObjects(text) {
-  const [header, ...body] = parseCsv(text).filter((r) => r.some((cell) => cell !== ''));
-  return body.map((r) => Object.fromEntries(header.map((h, i) => [h.trim(), (r[i] ?? '').trim()])));
-}
-
-async function fetchSheetTab(sheetId, tabName) {
-  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(
-      `No se pudo leer la pestaña "${tabName}" del Google Sheet (HTTP ${res.status}). ¿Sigue compartido como "Cualquiera con el enlace puede ver"?`,
-    );
-  }
-  return csvToObjects(await res.text());
-}
-
-/* M/D/YYYY -> YYYY-MM-DD. El Sheet usa 12/31/9999 como sentinela de
+/* M/D/YYYY -> YYYY-MM-DD. La tabla usa 12/31/9999 como sentinela de
    "sin fecha" (empleados activos no tienen fecha de baja) -> null. */
 function toIsoDate(mdy) {
   const m = (mdy || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -63,7 +27,7 @@ function toIsoDate(mdy) {
   return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
 }
 
-/* El Sheet no siempre acentúa igual el mismo nombre en su propia fila y en
+/* La tabla no siempre acentúa igual el mismo nombre en su propia fila y en
    "Reporta a:" de quien le reporta (ej. "Sofia Elizondo Marquez" vs "Sofía
    Elizondo Márquez") — se normaliza (sin acentos, minúsculas, sin espacios
    extra) solo para emparejar, nunca para lo que se muestra. */
@@ -75,7 +39,7 @@ function collapseSpaces(s) {
   return (s || '').replace(/\s+/g, ' ').trim();
 }
 
-/* El Sheet trae typos ocasionales en "Puesto Completo" que rompen cualquier
+/* La tabla trae typos ocasionales en "Puesto Completo" que rompen cualquier
    agrupación/derivación por puesto. Diccionario chico, extensible. */
 const PUESTO_FIXES = {
   'Inbound Marketing Specialit': 'Inbound Marketing Specialist',
@@ -89,8 +53,8 @@ function correctPuesto(puesto) {
 
 const NIVEL_INDEFINIDO = new Set(['', 'Por Definir']);
 
-export async function loadEmpleadosFromSheet(sheetId) {
-  const rows = await fetchSheetTab(sheetId, 'DB Empleados');
+export async function loadEmpleadosFromBigQuery(table) {
+  const rows = await fetchEmpleadosTable(table);
   const clean = rows.filter((r) => r['Nombre Completo']); // descarta filas en blanco/de relleno
   const excluidos = rows.filter((r) => !r['Nombre Completo'] && r['Estatus'] === 'Activo').length;
   const nameToId = new Map(clean.map((r) => [normalizeName(r['Nombre Completo']), r['INTERIUS ID']]));
@@ -130,7 +94,7 @@ export async function loadEmpleadosFromSheet(sheetId) {
         edad: Number.isFinite(edad) ? edad : null,
         fechaNacimiento,
         fechaIngreso,
-        fechaPuesto: fechaIngreso, // el Sheet no registra fecha de cambio de puesto
+        fechaPuesto: fechaIngreso, // la tabla no registra fecha de cambio de puesto
         reportsTo: nameToId.get(normalizeName(r['Reporta a:'] || '')) || null,
       });
 

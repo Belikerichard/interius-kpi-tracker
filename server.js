@@ -2,15 +2,15 @@
    (data/store.json) en vez de localStorage. Mismo contrato que antes: el
    cliente pide el blob completo y lo vuelve a mandar completo al guardar.
    Equipo, antigüedad y bajas ya no viven en /data: se leen en vivo de la
-   pestaña "DB Empleados" del Google Sheet configurado en config.json (ver
-   sheets.js). data/personas.json quedó solo como el control de acceso —
-   qué correo tiene qué rol de login — porque esa asignación no existe en
-   el Sheet y no se debe mezclar ahí. */
+   tabla de BigQuery configurada en config.json (ver bigquery.js).
+   data/personas.json quedó solo como el control de acceso — qué correo
+   tiene qué rol de login — porque esa asignación no existe en la tabla y
+   no se debe mezclar ahí. */
 import express from 'express';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadEmpleadosFromSheet } from './sheets.js';
+import { loadEmpleadosFromBigQuery } from './bigquery.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, 'data');
@@ -21,7 +21,10 @@ async function readJson(file) {
 }
 
 async function loadPersonasLive(config) {
-  const [{ personas, empleados, bajas, dataQuality }, access] = await Promise.all([loadEmpleadosFromSheet(config.sheetId), readJson('personas.json')]);
+  const [{ personas, empleados, bajas, dataQuality }, access] = await Promise.all([
+    loadEmpleadosFromBigQuery(config.bigqueryTable),
+    readJson('personas.json'),
+  ]);
   const roleByEmail = new Map(access.map((a) => [a.email.toLowerCase(), a.role]));
   return { personas: personas.map((p) => ({ ...p, role: roleByEmail.get(p.email) })), empleados, bajas, dataQuality };
 }
@@ -53,7 +56,7 @@ app.use(express.static(__dirname));
 
 // ponytail: en Vercel el filesystem del deploy es de solo lectura (fuera de
 // /tmp) — el caché a disco es best-effort; si falla, cada request recompone
-// desde el Sheet en vez de tronar. Local (npm start) no cambia: sigue
+// desde BigQuery en vez de tronar. Local (npm start) no cambia: sigue
 // cacheando a data/store.json como antes.
 async function cacheStore(data) {
   try {
@@ -84,7 +87,7 @@ app.post('/api/data/restore', async (req, res) => {
   res.json(data);
 });
 
-/* Refresca solo personas (equipo + accesos) desde el Sheet, sin tocar el
+/* Refresca solo personas (equipo + accesos) desde BigQuery, sin tocar el
    resto del estado guardado — usado cuando alguien nuevo recibe acceso y
    su navegador todavía tiene el store.json viejo cacheado. */
 app.get('/api/personas', async (req, res) => {

@@ -57,7 +57,7 @@ document.querySelectorAll('.subtab').forEach((t) => {
    compartido) — así se pidió: filtros dentro de cada apartado. Los
    defaults reproducen la ventana que cada vista mostraba antes de que
    existiera el filtro. Calidad de datos no tiene filtro: audita el estado
-   actual del Sheet, no tiene sentido histórico. */
+   actual de la tabla, no tiene sentido histórico. */
 const RANGE_DEFAULTS = {
   estructura: ['', mesActual()],
   antiguedad: ['', mesActual()],
@@ -75,7 +75,7 @@ const RANGE_RENDERERS = {
   cruces: () => renderCruces(),
 };
 /* El picker nativo de mes se siente lento si puedes navegar años sin límite
-   (Enero 2017 es antes del registro más viejo del Sheet) — acotarlo con
+   (Enero 2017 es antes del registro más viejo de la tabla) — acotarlo con
    min/max evita eso y de paso no deja elegir un mes futuro. */
 const FECHA_MIN_FILTRO = '2017-01';
 Object.entries(RANGE_DEFAULTS).forEach(([prefix, [desde, hasta]]) => {
@@ -102,11 +102,11 @@ function activos() {
 
 /* ---- reconstrucción histórica ----
    appData.empleados solo trae activos hoy y appData.bajas solo bajas con
-   fecha real (el sentinela 12/31/9999 ya se filtró en sheets.js). Para
+   fecha real (el sentinela 12/31/9999 ya se filtró en bigquery.js). Para
    responder "cómo estaba la organización en estas fechas" hace falta unir
    ambas listas con su fechaIngreso/fechaSalida y reconstruir quién estaba
    activo en cualquier fecha pasada. Área/nivel se tratan como constantes
-   durante todo el tenure de la persona porque el Sheet no registra cambios
+   durante todo el tenure de la persona porque la tabla no registra cambios
    de puesto (ver README) — la misma simplificación que ya usaba el resto
    de esta vista, no es nueva para el filtro de fechas. */
 function historico() {
@@ -278,7 +278,7 @@ function wrapLabel(label, maxLen = 14) {
 }
 
 /* Antepone el orden conocido, pero nunca descarta valores reales que no
-   estén en la lista (ej. si agregan un área nueva en el Sheet) — se
+   estén en la lista (ej. si agregan un área nueva en la tabla) — se
    agregan al final en vez de desaparecer en silencio de las gráficas. */
 function orderedKeys(present, order) {
   const known = order.filter((k) => present.has(k));
@@ -720,7 +720,7 @@ function renderRotacion() {
     options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } },
   });
   document.getElementById('rotacion-motivos-nota').textContent = sinMotivo
-    ? `${sinMotivo} baja(s) sin motivo registrado en el Sheet (excluidas de la gráfica de motivos).`
+    ? `${sinMotivo} baja(s) sin motivo registrado en la tabla (excluidas de la gráfica de motivos).`
     : '';
 
   const buckets = tenureBuckets(conAntiguedad);
@@ -745,12 +745,12 @@ function renderCalidad() {
   const emp = activos();
   const dq = appData.dataQuality || { excluidos: 0, incompletos: [] };
   document.getElementById('calidad-nota').textContent =
-    `${dq.excluidos} registro(s) con Estatus = Activo se excluyeron del análisis por venir sin Nombre Completo (filas de plantilla vacías del Sheet).`;
+    `${dq.excluidos} registro(s) con Estatus = Activo se excluyeron del análisis por venir sin Nombre Completo (filas de plantilla vacías de la tabla).`;
 
   const pct = emp.length ? Math.round((dq.incompletos.length / emp.length) * 100) : 0;
   document.getElementById('calidad-stats').innerHTML = `
     <div class="stat-card"><div class="sq"></div><div class="label">Registros incompletos</div><div class="value" style="color:${pct ? 'var(--amarillo)' : 'var(--verde)'}">${dq.incompletos.length}</div><div class="sub">${pct}% de la plantilla activa</div></div>
-    <div class="stat-card"><div class="sq"></div><div class="label">Registros excluidos</div><div class="value">${dq.excluidos}</div><div class="sub">sin Nombre Completo en el Sheet</div></div>
+    <div class="stat-card"><div class="sq"></div><div class="label">Registros excluidos</div><div class="value">${dq.excluidos}</div><div class="sub">sin Nombre Completo en la tabla</div></div>
   `;
 
   const tbody = document.querySelector('#calidad-table tbody');

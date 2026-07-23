@@ -48,7 +48,7 @@ function findAuthorizedPersona(email) {
 }
 
 /* Si el correo no aparece en el appData ya cacheado, puede ser porque se
-   dio de alta a alguien nuevo (en el Sheet o en data/personas.json) después
+   dio de alta a alguien nuevo (en la tabla o en data/personas.json) después
    de que este navegador guardó su copia. Antes de negar el acceso, se
    refresca personas desde el servidor y se reintenta una vez. */
 async function refreshPersonasFromSource() {
