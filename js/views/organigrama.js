@@ -126,26 +126,35 @@ function renderFocusView(focusId, roots, childrenMap, personaById, empleadoById,
   return `<div class="org-focus-view">${upBtn}${focusHtml}${levelHtml}</div>`;
 }
 
+const CARD_DIMS = {
+  lg: { avatar: 68, width: 200, font: 20, minHeight: 236 },
+  md: { avatar: 52, width: 168, font: 16, minHeight: 200 },
+  xs: { avatar: 30, width: 118, font: 11, minHeight: 0 },
+};
+
 function renderCard(p, color, childrenMap, empleadoById, size, isMatch, showHint = true) {
   const kids = childrenMap[p.id] || [];
   const count = teamSize(p.id, childrenMap, new Set());
   const area = empleadoById[p.id]?.area || '';
-  const dims = size === 'lg' ? { avatar: 68, width: 200, font: 20, minHeight: 236 } : { avatar: 52, width: 168, font: 16, minHeight: 200 };
+  const dims = CARD_DIMS[size];
+  const compact = size === 'xs';
 
   return `<div class="org-node">
-    <div class="org-card2${isMatch ? ' org-match' : ''}" style="--org-color:${color};width:${dims.width}px;min-height:${dims.minHeight}px" data-orgcard="${p.id}" data-hasreports="${kids.length > 0}">
+    <div class="org-card2${compact ? ' org-card2-xs' : ''}${isMatch ? ' org-match' : ''}" style="--org-color:${color};width:${dims.width}px;min-height:${dims.minHeight}px" data-orgcard="${p.id}" data-hasreports="${kids.length > 0}">
       <div class="avatar" style="width:${dims.avatar}px;height:${dims.avatar}px;border-radius:50%;font-size:${dims.font}px;margin:0 auto 10px;background:${color}">${initials(p.name)}</div>
-      <div class="org-dept-label" style="color:${color}">${area || ' '}</div>
+      ${compact ? '' : `<div class="org-dept-label" style="color:${color}">${area || ' '}</div>`}
       <div class="org-name">${p.name}</div>
       <div class="org-role">${p.rol || 'Sin puesto'}</div>
-      ${count ? `<div class="badge-team" style="background:${color}1a;color:${color}">${count} ${count === 1 ? 'persona' : 'personas'}</div>` : ''}
+      ${!compact && count ? `<div class="badge-team" style="background:${color}1a;color:${color}">${count} ${count === 1 ? 'persona' : 'personas'}</div>` : ''}
       ${kids.length && showHint ? `<div class="org-hint" style="color:${color}">Ver equipo (${kids.length}) →</div>` : ''}
     </div>
   </div>`;
 }
 
 /* Árbol completo: todos los niveles a la vez, cada rama anidada bajo su
-   manager en vez de navegar nivel por nivel como en renderFocusView. */
+   manager en vez de navegar nivel por nivel como en renderFocusView.
+   Tarjetas compactas (xs) — con el tamaño normal, la organización entera
+   no entra sin scroll interminable. */
 function renderFullTree(roots, childrenMap, empleadoById, colorOf, matchId) {
   return `<div class="org-tree">${roots.map((r) => renderTreeBranch(r, childrenMap, empleadoById, colorOf, matchId)).join('')}</div>`;
 }
@@ -153,7 +162,7 @@ function renderFullTree(roots, childrenMap, empleadoById, colorOf, matchId) {
 function renderTreeBranch(p, childrenMap, empleadoById, colorOf, matchId) {
   const kids = childrenMap[p.id] || [];
   return `<div class="org-branch">
-    ${renderCard(p, colorOf[p.id], childrenMap, empleadoById, 'md', matchId === p.id, false)}
+    ${renderCard(p, colorOf[p.id], childrenMap, empleadoById, 'xs', matchId === p.id, false)}
     ${kids.length ? `<div class="org-children">${kids.map((k) => renderTreeBranch(k, childrenMap, empleadoById, colorOf, matchId)).join('')}</div>` : ''}
   </div>`;
 }
