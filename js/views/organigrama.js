@@ -6,6 +6,7 @@ import { openPersonaDetalle } from './equipo.js';
 
 let focusId = null; // null = sin selección: entra al CEO si hay uno solo, si no hay un único root muestra todos
 let searchQuery = '';
+let expandedAll = false; // toggle: árbol completo (todos los niveles) vs. vista contraída de un nivel a la vez
 
 function normalize(s) {
   return (s || '')
@@ -48,12 +49,14 @@ export function renderOrganigrama() {
   wrap.innerHTML =
     q && !matchId
       ? `<div class="empty">Nadie con "${searchQuery}" en el nombre.</div>`
-      : renderFocusView(focusId, roots, childrenMap, personaById, empleadoById, colorOf, matchId);
+      : expandedAll
+        ? renderFullTree(roots, childrenMap, empleadoById, colorOf, matchId)
+        : renderFocusView(focusId, roots, childrenMap, personaById, empleadoById, colorOf, matchId);
 
   wrap.querySelectorAll('[data-orgcard]').forEach((el) => {
     el.addEventListener('click', () => {
       const id = el.dataset.orgcard;
-      if (el.dataset.hasreports === 'true') {
+      if (!expandedAll && el.dataset.hasreports === 'true') {
         focusId = id;
         searchQuery = '';
         document.getElementById('org-search').value = '';
@@ -80,6 +83,12 @@ document.getElementById('org-collapse-all').addEventListener('click', () => {
   focusId = null;
   searchQuery = '';
   document.getElementById('org-search').value = '';
+  withViewTransition(() => renderOrganigrama());
+});
+const toggleViewBtn = document.getElementById('org-toggle-view');
+toggleViewBtn.addEventListener('click', () => {
+  expandedAll = !expandedAll;
+  toggleViewBtn.textContent = expandedAll ? 'Vista por niveles' : 'Ver todo el equipo';
   withViewTransition(() => renderOrganigrama());
 });
 
@@ -117,7 +126,7 @@ function renderFocusView(focusId, roots, childrenMap, personaById, empleadoById,
   return `<div class="org-focus-view">${upBtn}${focusHtml}${levelHtml}</div>`;
 }
 
-function renderCard(p, color, childrenMap, empleadoById, size, isMatch) {
+function renderCard(p, color, childrenMap, empleadoById, size, isMatch, showHint = true) {
   const kids = childrenMap[p.id] || [];
   const count = teamSize(p.id, childrenMap, new Set());
   const area = empleadoById[p.id]?.area || '';
@@ -130,8 +139,22 @@ function renderCard(p, color, childrenMap, empleadoById, size, isMatch) {
       <div class="org-name">${p.name}</div>
       <div class="org-role">${p.rol || 'Sin puesto'}</div>
       ${count ? `<div class="badge-team" style="background:${color}1a;color:${color}">${count} ${count === 1 ? 'persona' : 'personas'}</div>` : ''}
-      ${kids.length ? `<div class="org-hint" style="color:${color}">Ver equipo (${kids.length}) →</div>` : ''}
+      ${kids.length && showHint ? `<div class="org-hint" style="color:${color}">Ver equipo (${kids.length}) →</div>` : ''}
     </div>
+  </div>`;
+}
+
+/* Árbol completo: todos los niveles a la vez, cada rama anidada bajo su
+   manager en vez de navegar nivel por nivel como en renderFocusView. */
+function renderFullTree(roots, childrenMap, empleadoById, colorOf, matchId) {
+  return `<div class="org-tree">${roots.map((r) => renderTreeBranch(r, childrenMap, empleadoById, colorOf, matchId)).join('')}</div>`;
+}
+
+function renderTreeBranch(p, childrenMap, empleadoById, colorOf, matchId) {
+  const kids = childrenMap[p.id] || [];
+  return `<div class="org-branch">
+    ${renderCard(p, colorOf[p.id], childrenMap, empleadoById, 'md', matchId === p.id, false)}
+    ${kids.length ? `<div class="org-children">${kids.map((k) => renderTreeBranch(k, childrenMap, empleadoById, colorOf, matchId)).join('')}</div>` : ''}
   </div>`;
 }
 
