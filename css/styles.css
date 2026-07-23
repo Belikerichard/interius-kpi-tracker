@@ -756,7 +756,7 @@ input[type='number'] {
 .org-children {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
   position: relative;
   padding-top: 16px;
