@@ -53,6 +53,8 @@ export function renderOrganigrama() {
         ? renderFullTree(roots, childrenMap, empleadoById, colorOf, matchId)
         : renderFocusView(focusId, roots, childrenMap, personaById, empleadoById, colorOf, matchId);
 
+  equalizeLevelCardHeights(wrap);
+
   wrap.querySelectorAll('[data-orgcard]').forEach((el) => {
     el.addEventListener('click', () => {
       const id = el.dataset.orgcard;
@@ -73,6 +75,18 @@ export function renderOrganigrama() {
       withViewTransition(() => renderOrganigrama());
     });
   });
+}
+
+/* align-items:stretch en .org-level solo empareja alturas dentro de cada
+   línea cuando el nivel hace wrap a varias filas — dos personas del mismo
+   nivel podían verse de distinta altura solo por caer en filas distintas.
+   Medimos la tarjeta más alta del nivel completo y la fijamos en todas. */
+function equalizeLevelCardHeights(wrap) {
+  const cards = [...wrap.querySelectorAll('.org-level .org-card2')];
+  if (cards.length < 2) return;
+  cards.forEach((c) => (c.style.height = ''));
+  const max = Math.max(...cards.map((c) => c.scrollHeight));
+  cards.forEach((c) => (c.style.height = `${max}px`));
 }
 
 document.getElementById('org-search').addEventListener('input', (e) => {
