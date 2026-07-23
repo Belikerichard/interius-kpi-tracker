@@ -728,7 +728,7 @@ input[type='number'] {
   content: '';
   position: absolute;
   top: 0;
-  width: 50%;
+  width: calc(50% + 3px); /* +3px = mitad del gap de 6px entre tarjetas, para que la línea no se corte en el espacio */
   height: 16px;
   border-top: 1px solid #c7c7dd;
 }
