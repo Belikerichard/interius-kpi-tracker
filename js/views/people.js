@@ -856,9 +856,33 @@ function fillMeReportsToSelect(currentName) {
   sel.value = currentName || '';
 }
 
+// Catálogo = lo ya usado en la tabla + los valores canónicos que ya conoce
+// la app (NIVEL_ORDEN/AREAS_ORDEN, las mismas listas que ordenan las
+// gráficas). Es sugerencia (<datalist>), no restricción: sigue aceptando
+// texto libre para un valor genuinamente nuevo, pero empuja a reusar lo que
+// ya existe en vez de escribir variantes con typos.
+function distinctValues(field) {
+  return [...new Set((appData.empleadosTabla || []).map((e) => e[field]).filter(Boolean))];
+}
+
+function fillDatalist(id, values) {
+  document.getElementById(id).innerHTML = [...new Set(values)]
+    .sort((a, b) => a.localeCompare(b))
+    .map((v) => `<option value="${v}"></option>`)
+    .join('');
+}
+
+function populateCatalogos() {
+  fillDatalist('catalogo-nivel', [...NIVEL_ORDEN.filter((n) => n !== 'Sin definir'), ...distinctValues('nivelPuesto')]);
+  fillDatalist('catalogo-area', [...AREAS_ORDEN.filter((a) => a !== 'Sin área'), ...distinctValues('area')]);
+  fillDatalist('catalogo-puesto', distinctValues('puesto'));
+  fillDatalist('catalogo-sexo', distinctValues('sexo'));
+}
+
 function openEmpleadoModal(id) {
   const e = (appData.empleadosTabla || []).find((x) => x.id === id);
   if (!e) return;
+  populateCatalogos();
   document.getElementById('me-title').textContent = e.nombre;
   document.getElementById('me-id').value = e.id;
   document.getElementById('me-nombre').value = e.nombre || '';
@@ -901,7 +925,13 @@ document.getElementById('me-save').addEventListener('click', async () => {
     showToast('El nombre no puede quedar vacío');
     return;
   }
-  if (!(await updateEmpleadoRemoto(id, payload))) return;
+  const btn = document.getElementById('me-save');
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+  const ok = await updateEmpleadoRemoto(id, payload);
+  btn.disabled = false;
+  btn.textContent = 'Guardar en BigQuery';
+  if (!ok) return;
   closeModal('modal-empleado');
   renderBaseDatos();
   showToast('Empleado actualizado en BigQuery');

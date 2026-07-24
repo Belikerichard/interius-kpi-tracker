@@ -11,12 +11,24 @@
 import { appData, setAppData } from './state.js';
 import { showToast } from './utils.js';
 import { switchView } from './nav.js';
-import { getIdToken, syncRoleFromAppData } from './auth.js';
+import { getIdToken, syncRoleFromAppData, logout } from './auth.js';
 
+// Sin token no tiene caso ni intentar el fetch — se finge una respuesta 401
+// con .json() (como una Response real) para que el resto del código no
+// tenga que distinguir "no había token" de "el servidor lo rechazó".
 async function authedFetch(url, opts = {}) {
   const token = getIdToken();
-  if (!token) return { ok: false, status: 401 };
+  if (!token) return { ok: false, status: 401, json: async () => ({}) };
   return fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` } });
+}
+
+// Token vencido o sesión ya no válida: en vez de un toast genérico que se
+// puede pasar por alto (y dejar el modal ahí, como si "no dejara guardar"),
+// se cierra la sesión y se recarga para mostrar el login de nuevo.
+function sessionExpired() {
+  showToast('Tu sesión expiró. Vuelve a iniciar sesión.');
+  logout();
+  setTimeout(() => location.reload(), 900);
 }
 
 export async function loadData() {
@@ -39,6 +51,10 @@ export async function persist() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(appData),
     });
+    if (res.status === 401) {
+      sessionExpired();
+      return false;
+    }
     if (res.status === 409) {
       const { data } = await res.json();
       if (data) setAppData(data);
@@ -47,7 +63,7 @@ export async function persist() {
       return false;
     }
     if (!res.ok) {
-      showToast('No se pudo guardar (sesión vencida o sin permiso).');
+      showToast('No se pudo guardar (sin permiso).');
       return false;
     }
     appData._rev = (await res.json())._rev;
@@ -68,6 +84,10 @@ export async function updateEmpleadoRemoto(id, fields) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(fields),
     });
+    if (res.status === 401) {
+      sessionExpired();
+      return false;
+    }
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       showToast(body.error || 'No se pudo guardar en BigQuery.');
@@ -85,6 +105,10 @@ export async function updateEmpleadoRemoto(id, fields) {
 export async function restoreSourceData() {
   try {
     const res = await authedFetch('/api/data/restore', { method: 'POST' });
+    if (res.status === 401) {
+      sessionExpired();
+      return;
+    }
     if (!res.ok) {
       showToast('No se pudo restaurar.');
       return;

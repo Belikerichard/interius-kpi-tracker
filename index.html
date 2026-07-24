@@ -598,18 +598,34 @@
           <div class="field"><label>Correo</label><input type="email" id="me-correo" /></div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Puesto</label><input type="text" id="me-puesto" /></div>
-          <div class="field"><label>Nivel de puesto</label><input type="text" id="me-nivel" placeholder="Ej. Consultant" /></div>
+          <div class="field">
+            <label>Puesto</label>
+            <input type="text" id="me-puesto" list="catalogo-puesto" />
+            <datalist id="catalogo-puesto"></datalist>
+          </div>
+          <div class="field">
+            <label>Nivel de puesto</label>
+            <input type="text" id="me-nivel" list="catalogo-nivel" placeholder="Ej. Consultant" />
+            <datalist id="catalogo-nivel"></datalist>
+          </div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Área</label><input type="text" id="me-area" /></div>
+          <div class="field">
+            <label>Área</label>
+            <input type="text" id="me-area" list="catalogo-area" />
+            <datalist id="catalogo-area"></datalist>
+          </div>
           <div class="field">
             <label>Reporta a</label
             ><select id="me-reportsto"></select>
           </div>
         </div>
         <div class="field-row">
-          <div class="field"><label>Sexo</label><input type="text" id="me-sexo" /></div>
+          <div class="field">
+            <label>Sexo</label>
+            <input type="text" id="me-sexo" list="catalogo-sexo" />
+            <datalist id="catalogo-sexo"></datalist>
+          </div>
           <div class="field"><label>Edad</label><input type="number" id="me-edad" min="0" /></div>
         </div>
         <div class="field-row">

@@ -1,10 +1,1 @@
-[
-  {"id":"kpi-001","name":"NPS trimestral","categoria":"Satisfacción","unidad":"pts","meta":70,"actual":64,"direccion":"up","clienteId":"cli-solaris","personaId":"per-ana"},
-  {"id":"kpi-002","name":"Retención de cuenta","categoria":"Retención","unidad":"%","meta":95,"actual":97,"direccion":"up","clienteId":"cli-solaris","personaId":"per-ana"},
-  {"id":"kpi-003","name":"CPL campañas","categoria":"Rentabilidad","unidad":"$","meta":180,"actual":245,"direccion":"down","clienteId":"cli-solaris","personaId":"per-luis"},
-  {"id":"kpi-004","name":"Entregables a tiempo","categoria":"Entrega / Operación","unidad":"%","meta":95,"actual":88,"direccion":"up","clienteId":"cli-novatech","personaId":"per-sofia"},
-  {"id":"kpi-005","name":"ROAS mensual","categoria":"Rentabilidad","unidad":"#","meta":4,"actual":4.6,"direccion":"up","clienteId":"cli-novatech","personaId":"per-luis"},
-  {"id":"kpi-006","name":"Tiempo de respuesta","categoria":"Calidad","unidad":"días","meta":2,"actual":3.5,"direccion":"down","clienteId":"cli-novatech","personaId":"per-ana"},
-  {"id":"kpi-007","name":"Leads calificados / mes","categoria":"Crecimiento","unidad":"#","meta":50,"actual":41,"direccion":"up","clienteId":"cli-verum","personaId":"per-luis"},
-  {"id":"kpi-008","name":"Satisfacción de contenido","categoria":"Satisfacción","unidad":"%","meta":90,"actual":93,"direccion":"up","clienteId":"cli-verum","personaId":"per-sofia"}
-]
+[]
