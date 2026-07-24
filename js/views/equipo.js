@@ -1,6 +1,6 @@
 import { appData } from '../state.js';
-import { colorFor, initials } from '../utils.js';
-import { achievement, avgAchievement, ratingFromScore, statusOf, clienteName, personaName } from '../calc.js';
+import { colorFor, initials, kpiRowHtml, statCardHtml } from '../utils.js';
+import { avgAchievement, ratingFromScore, clienteName, personaName } from '../calc.js';
 import { visiblePersonas, visibleKpisByPersona, canEdit } from '../permissions.js';
 import { openPersonaModal } from '../modals.js';
 
@@ -54,13 +54,10 @@ export function openPersonaDetalle(id) {
       ${canEdit() ? `<button class="btn secondary" id="btn-edit-persona">Editar</button>` : ''}
     </div>
     <div class="cards-row">
-      <div class="stat-card"><div class="label">Cumplimiento promedio</div><div class="value">${kpis.length ? avg + '%' : '—'}</div></div>
-      <div class="stat-card"><div class="label">KPIs bajo su responsabilidad</div><div class="value">${kpis.length}</div></div>
-      <div class="stat-card"><div class="label">Personas a su cargo</div><div class="value">${directReports.length}</div></div>
-      <div class="stat-card">
-        <div class="label">Calificación de desempeño estimada</div>
-        <div class="value" style="font-size:18px;margin-top:10px;color:${rating.color}">${kpis.length ? rating.label : 'Sin datos'}</div>
-      </div>
+      ${statCardHtml('Cumplimiento promedio', kpis.length ? avg + '%' : '—')}
+      ${statCardHtml('KPIs bajo su responsabilidad', kpis.length)}
+      ${statCardHtml('Personas a su cargo', directReports.length)}
+      ${statCardHtml('Calificación de desempeño estimada', kpis.length ? rating.label : 'Sin datos', `font-size:18px;margin-top:10px;color:${rating.color}`)}
     </div>
     <div class="panel">
       <h3><span class="bracket-mini">[</span> Cómo impacta esto su calificación <span class="bracket-mini">]</span></h3>
@@ -76,19 +73,7 @@ export function openPersonaDetalle(id) {
         <h3><span class="bracket-mini">[</span> KPIs asignados <span class="bracket-mini">]</span></h3>
         ${
           kpis.length
-            ? kpis
-                .map((k) => {
-                  const pct = achievement(k);
-                  const s = statusOf(pct);
-                  return `<div class="kpi-list-item">
-            <div><div class="name">${k.name}</div><div class="meta">Cliente: ${clienteName(k.clienteId)}</div></div>
-            <div style="display:flex;align-items:center;gap:10px;">
-              <span class="meta">${k.actual}${k.unidad} / ${k.meta}${k.unidad}</span>
-              <span class="badge ${s}">${Math.round(pct)}%</span>
-            </div>
-          </div>`;
-                })
-                .join('')
+            ? kpis.map((k) => kpiRowHtml(k, `Cliente: ${clienteName(k.clienteId)}`)).join('')
             : `<div class="empty">Sin KPIs asignados todavía.</div>`
         }
       </div>

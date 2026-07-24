@@ -266,6 +266,7 @@
             <div class="subtab" data-subtab="rotacion">Rotación</div>
             <div class="subtab" data-subtab="calidad">Calidad de datos</div>
             <div class="subtab" data-subtab="cruces">Cruces estratégicos</div>
+            <div class="subtab" data-subtab="basedatos">Base de datos</div>
           </div>
 
           <!-- ---- ESTRUCTURA ORGANIZACIONAL ---- -->
@@ -466,6 +467,37 @@
               <div id="estancamiento-alert"></div>
             </div>
           </div>
+
+          <!-- ---- BASE DE DATOS (editable, todos los campos de la tabla) ---- -->
+          <div class="subview" id="subview-basedatos">
+            <p style="margin: 0 0 16px; color: #6b6b80; font-size: 13px">
+              Todos los registros de la tabla de BigQuery (Activo e Inactivo). Editar aquí escribe directo en esa tabla.
+            </p>
+            <div class="filters-row">
+              <select class="filter-input" id="basedatos-estatus">
+                <option value="">Todos los estatus</option>
+                <option value="Activo">Activo</option>
+                <option value="Inactivo">Inactivo</option>
+              </select>
+              <input type="text" class="filter-input" id="basedatos-search" placeholder="Buscar por nombre..." style="flex: 1; min-width: 180px" />
+            </div>
+            <div class="panel" style="padding: 0">
+              <table id="basedatos-table">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Puesto</th>
+                    <th>Nivel</th>
+                    <th>Área</th>
+                    <th>Estatus</th>
+                    <th>Reporta a</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -553,6 +585,62 @@
         <div class="modal-actions">
           <button class="btn secondary" data-close="modal-kpi">Cancelar</button>
           <button class="btn" id="mk-save">Guardar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="modal-empleado">
+      <div class="modal">
+        <h3 id="me-title">Editar empleado</h3>
+        <input type="hidden" id="me-id" />
+        <div class="field-row">
+          <div class="field"><label>Nombre completo</label><input type="text" id="me-nombre" /></div>
+          <div class="field"><label>Correo</label><input type="email" id="me-correo" /></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Puesto</label><input type="text" id="me-puesto" /></div>
+          <div class="field"><label>Nivel de puesto</label><input type="text" id="me-nivel" placeholder="Ej. Consultant" /></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Área</label><input type="text" id="me-area" /></div>
+          <div class="field">
+            <label>Reporta a</label
+            ><select id="me-reportsto"></select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Sexo</label><input type="text" id="me-sexo" /></div>
+          <div class="field"><label>Edad</label><input type="number" id="me-edad" min="0" /></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Fecha de nacimiento</label><input type="date" id="me-fechanacimiento" /></div>
+          <div class="field"><label>Fecha de contratación</label><input type="date" id="me-fechaingreso" /></div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Estatus</label>
+            <select id="me-estatus">
+              <option value="Activo">Activo</option>
+              <option value="Inactivo">Inactivo</option>
+            </select>
+          </div>
+          <div class="field"><label>Fecha de baja</label><input type="date" id="me-fechabaja" /></div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Tipo de baja</label>
+            <select id="me-tipobaja">
+              <option value="">—</option>
+              <option value="Voluntaria">Voluntaria</option>
+              <option value="Involuntaria">Involuntaria</option>
+            </select>
+          </div>
+          <div class="field"><label>Motivo de baja</label><input type="text" id="me-motivobaja" /></div>
+        </div>
+        <p style="margin: 4px 0 0; color: #9a9ab0; font-size: 12px">Esto escribe directo en la tabla de BigQuery — no en data/store.json.</p>
+        <div class="modal-actions">
+          <button class="btn secondary" data-close="modal-empleado">Cancelar</button>
+          <button class="btn" id="me-save">Guardar en BigQuery</button>
         </div>
       </div>
     </div>

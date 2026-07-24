@@ -1,4 +1,27 @@
+import { achievement, statusOf } from './calc.js';
+
 export const PALETTE = ['#19199A', '#EE7D38', '#4C4DF6', '#66BCF9', '#1E9E6B', '#E0A61A', '#D64545', '#7A5CFA'];
+
+// Misma fila se repetía igual en dashboard/clientes/equipo: nombre + una
+// línea de meta (cada vista pasa la suya) + actual/meta + badge de estado.
+export function kpiRowHtml(k, metaLine) {
+  const pct = achievement(k);
+  const st = statusOf(pct);
+  return `<div class="kpi-list-item">
+    <div><div class="name">${k.name}</div><div class="meta">${metaLine}</div></div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="meta">${k.actual}${k.unidad} / ${k.meta}${k.unidad}</span>
+      <span class="badge ${st}">${Math.round(pct)}%</span>
+    </div>
+  </div>`;
+}
+
+// stat-card simple (label + valor) usado en las páginas de detalle de
+// cliente y persona; el de dashboard.js trae además .sq/.sub y se arma
+// aparte ahí, no es el mismo shape.
+export function statCardHtml(label, valueHtml, valueStyle = '') {
+  return `<div class="stat-card"><div class="label">${label}</div><div class="value"${valueStyle ? ` style="${valueStyle}"` : ''}>${valueHtml}</div></div>`;
+}
 
 // ponytail: native View Transitions API, falls back to a plain DOM update when unsupported
 export function withViewTransition(fn) {

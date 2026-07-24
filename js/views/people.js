@@ -1,5 +1,8 @@
 import { appData } from '../state.js';
-import { tenureYears, fmtYears, tenureBuckets, PALETTE } from '../utils.js';
+import { tenureYears, fmtYears, tenureBuckets, PALETTE, showToast } from '../utils.js';
+import { canEdit } from '../permissions.js';
+import { updateEmpleadoRemoto } from '../data.js';
+import { openModal, closeModal } from '../modals.js';
 
 let currentSubtab = 'estructura';
 let chartArea = null,
@@ -42,6 +45,7 @@ export function switchSubtab(name) {
   if (name === 'rotacion') renderRotacion();
   if (name === 'calidad') renderCalidad();
   if (name === 'cruces') renderCruces();
+  if (name === 'basedatos') renderBaseDatos();
 }
 
 export function renderPeopleView() {
@@ -798,3 +802,107 @@ function renderCruces() {
         .join('')
     : `<div class="empty">Nadie con 2+ años en Specialist/Jr detectado.</div>`;
 }
+
+/* ---- 7. BASE DE DATOS (editable, escribe directo a BigQuery) ---- */
+function normalizeText(s) {
+  return (s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function renderBaseDatos() {
+  const estatus = document.getElementById('basedatos-estatus').value;
+  const q = normalizeText(document.getElementById('basedatos-search').value);
+  const rows = (appData.empleadosTabla || [])
+    .filter((e) => !estatus || e.estatus === estatus)
+    .filter((e) => !q || normalizeText(e.nombre).includes(q))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+  const tbody = document.querySelector('#basedatos-table tbody');
+  tbody.innerHTML = rows.length
+    ? rows
+        .map(
+          (e) => `<tr>
+        <td><strong>${e.nombre}</strong></td>
+        <td>${e.puesto || '—'}</td>
+        <td>${e.nivelPuesto || '—'}</td>
+        <td>${e.area || '—'}</td>
+        <td><span class="badge ${e.estatus === 'Activo' ? 'ok' : 'bad'}">${e.estatus}</span></td>
+        <td>${e.reportsToName || '—'}</td>
+        <td>${canEdit() ? `<button class="btn small secondary" data-editempleado="${e.id}">Editar</button>` : ''}</td>
+      </tr>`,
+        )
+        .join('')
+    : `<tr><td colspan="7" class="empty">Sin registros con esos filtros.</td></tr>`;
+
+  tbody.querySelectorAll('[data-editempleado]').forEach((btn) => {
+    btn.addEventListener('click', () => openEmpleadoModal(btn.dataset.editempleado));
+  });
+}
+
+document.getElementById('basedatos-estatus').addEventListener('change', renderBaseDatos);
+document.getElementById('basedatos-search').addEventListener('input', renderBaseDatos);
+
+function fillMeReportsToSelect(currentName) {
+  const sel = document.getElementById('me-reportsto');
+  const opts = appData.empleados
+    .slice()
+    .sort((a, b) => a.nombre.localeCompare(b.nombre))
+    .map((e) => `<option value="${e.nombre}">${e.nombre}</option>`)
+    .join('');
+  sel.innerHTML = `<option value="">Nadie (nivel superior)</option>` + opts;
+  sel.value = currentName || '';
+}
+
+function openEmpleadoModal(id) {
+  const e = (appData.empleadosTabla || []).find((x) => x.id === id);
+  if (!e) return;
+  document.getElementById('me-title').textContent = e.nombre;
+  document.getElementById('me-id').value = e.id;
+  document.getElementById('me-nombre').value = e.nombre || '';
+  document.getElementById('me-correo').value = e.correo || '';
+  document.getElementById('me-puesto').value = e.puesto || '';
+  document.getElementById('me-nivel').value = e.nivelPuesto || '';
+  document.getElementById('me-area').value = e.area || '';
+  fillMeReportsToSelect(e.reportsToName);
+  document.getElementById('me-sexo').value = e.sexo || '';
+  document.getElementById('me-edad').value = e.edad ?? '';
+  document.getElementById('me-fechanacimiento').value = e.fechaNacimiento || '';
+  document.getElementById('me-fechaingreso').value = e.fechaIngreso || '';
+  document.getElementById('me-estatus').value = e.estatus || 'Activo';
+  document.getElementById('me-fechabaja').value = e.fechaBaja || '';
+  document.getElementById('me-tipobaja').value = e.tipoBaja || '';
+  document.getElementById('me-motivobaja').value = e.motivoBaja || '';
+  openModal('modal-empleado');
+}
+
+document.getElementById('me-save').addEventListener('click', async () => {
+  if (!canEdit()) return;
+  const id = document.getElementById('me-id').value;
+  const payload = {
+    nombre: document.getElementById('me-nombre').value.trim(),
+    correo: document.getElementById('me-correo').value.trim(),
+    puesto: document.getElementById('me-puesto').value.trim(),
+    nivelPuesto: document.getElementById('me-nivel').value.trim(),
+    area: document.getElementById('me-area').value.trim(),
+    reportsToName: document.getElementById('me-reportsto').value,
+    sexo: document.getElementById('me-sexo').value.trim(),
+    edad: document.getElementById('me-edad').value,
+    fechaNacimiento: document.getElementById('me-fechanacimiento').value,
+    fechaIngreso: document.getElementById('me-fechaingreso').value,
+    estatus: document.getElementById('me-estatus').value,
+    fechaBaja: document.getElementById('me-fechabaja').value,
+    tipoBaja: document.getElementById('me-tipobaja').value,
+    motivoBaja: document.getElementById('me-motivobaja').value.trim(),
+  };
+  if (!payload.nombre) {
+    showToast('El nombre no puede quedar vacío');
+    return;
+  }
+  if (!(await updateEmpleadoRemoto(id, payload))) return;
+  closeModal('modal-empleado');
+  renderBaseDatos();
+  showToast('Empleado actualizado en BigQuery');
+});

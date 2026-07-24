@@ -59,7 +59,7 @@ export function renderKpiTable() {
     inp.addEventListener('change', async () => {
       const kpi = appData.kpis.find((k) => k.id === inp.dataset.update);
       kpi.actual = Number(inp.value);
-      await persist();
+      if (!(await persist())) return;
       renderKpiTable();
       showToast('KPI actualizado');
     });

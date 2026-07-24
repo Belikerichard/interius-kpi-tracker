@@ -1,6 +1,6 @@
 import { appData } from '../state.js';
-import { colorFor, initials } from '../utils.js';
-import { achievement, avgAchievement, statusOf, statusLabel, personaName } from '../calc.js';
+import { colorFor, initials, kpiRowHtml, statCardHtml } from '../utils.js';
+import { avgAchievement, statusOf, statusLabel, personaName } from '../calc.js';
 import { visibleClientes, visibleKpisByCliente, visibleKpisByPersona } from '../permissions.js';
 import { switchView } from '../nav.js';
 import { openPersonaDetalle } from './equipo.js';
@@ -52,28 +52,16 @@ export function openClienteDetalle(id) {
       </div>
     </div>
     <div class="cards-row" style="grid-template-columns:repeat(3,1fr);">
-      <div class="stat-card"><div class="label">Cumplimiento promedio</div><div class="value">${kpis.length ? avg + '%' : '—'}</div></div>
-      <div class="stat-card"><div class="label">KPIs asignados</div><div class="value">${kpis.length}</div></div>
-      <div class="stat-card"><div class="label">Estado general</div><div class="value" style="font-size:16px;margin-top:12px"><span class="badge ${st}">${statusLabel(st)}</span></div></div>
+      ${statCardHtml('Cumplimiento promedio', kpis.length ? avg + '%' : '—')}
+      ${statCardHtml('KPIs asignados', kpis.length)}
+      ${statCardHtml('Estado general', `<span class="badge ${st}">${statusLabel(st)}</span>`, 'font-size:16px;margin-top:12px')}
     </div>
     <div class="grid-2">
       <div class="panel">
         <h3><span class="bracket-mini">[</span> KPIs de negocio <span class="bracket-mini">]</span></h3>
         ${
           kpis.length
-            ? kpis
-                .map((k) => {
-                  const pct = achievement(k);
-                  const s = statusOf(pct);
-                  return `<div class="kpi-list-item">
-            <div><div class="name">${k.name}</div><div class="meta">${k.categoria} · Responsable: ${personaName(k.personaId)}</div></div>
-            <div style="display:flex;align-items:center;gap:10px;">
-              <span class="meta">${k.actual}${k.unidad} / ${k.meta}${k.unidad}</span>
-              <span class="badge ${s}">${Math.round(pct)}%</span>
-            </div>
-          </div>`;
-                })
-                .join('')
+            ? kpis.map((k) => kpiRowHtml(k, `${k.categoria} · Responsable: ${personaName(k.personaId)}`)).join('')
             : `<div class="empty">Este cliente aún no tiene KPIs asignados.</div>`
         }
       </div>

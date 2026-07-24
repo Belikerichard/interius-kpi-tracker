@@ -57,11 +57,13 @@ consultar esa tabla con un `SELECT *`.
   (JSON) vive en la variable de entorno `GOOGLE_SERVICE_ACCOUNT_JSON` — un
   `.env` local (gitignorado, nunca se commitea) o una env var en Vercel, nunca
   un archivo dentro del repo. El service account necesita rol `BigQuery Data
-  Viewer` en el dataset y `BigQuery Job User` a nivel proyecto.
+  Viewer` en el dataset y `BigQuery Job User` a nivel proyecto para leer; para
+  poder editar desde "Base de datos" (People Analytics) necesita además
+  `BigQuery Data Editor` en ese mismo dataset.
 - Columnas que usa: `INTERIUS ID`, `Nombre Completo`, `Puesto Completo`,
   `Nivel de Puesto`, `Area`, `Reporta a:`, `Sexo`, `Edad`, `Fecha de
-  Contratación`, `Estatus` (`Activo` / `Inactivo`), `Tipo de Baja`, `Motivo
-  de Baja`, `Fecha de Baja`, `Correo`.
+  Nacimiento`, `Fecha de Contratación`, `Estatus` (`Activo` / `Inactivo`),
+  `Tipo de Baja`, `Motivo de Baja`, `Fecha de Baja`, `Correo`.
 - `Area` es texto libre capturado en la tabla (no se deriva de nada). Vacío
   cae en "Sin área" (ej. el CEO, que no pertenece a un área) y se marca en
   `dataQuality.incompletos`. `js/views/people.js` tiene un orden preferido
@@ -107,6 +109,23 @@ La app corre sobre un servidor Node/Express (`server.js`) que expone una API
 
 `data/store.json` es estado generado (como antes era el `localStorage` del
 navegador) — no está versionado en git.
+
+Cada blob guardado trae un `_rev` (contador). `POST /api/data` lo compara
+contra el `_rev` actual del servidor: si no coincide (alguien más guardó
+primero), responde `409` con los datos más recientes en vez de pisarlos en
+silencio — el cliente muestra un toast y recarga el dashboard con esa
+versión. Es un candado optimista, no un lock: si dos personas editan cosas
+distintas casi al mismo tiempo, la segunda en guardar simplemente reintenta
+sobre los datos frescos.
+
+> **Límite conocido en Vercel:** ahí el filesystem del deploy es de solo
+> lectura fuera de `/tmp`, y cada instancia serverless tiene su propio
+> `/tmp` — bajo tráfico concurrente, dos requests pueden caer en instancias
+> distintas y ver caches divergentes hasta que ambas recomponen desde
+> BigQuery. Para el uso actual (esporádico, pocos admins) no vale la pena
+> meter un store compartido real (Vercel KV/Postgres); si este tracker pasa
+> a tener varias personas editando a la vez en producción, ese es el punto
+> a resolver antes de confiar en `_rev` para evitar pisar cambios.
 
 ## Cómo correrlo en VS Code
 
@@ -173,16 +192,29 @@ Dos requisitos, en dos lugares distintos:
 Quien esté en la tabla pero no en `data/personas.json` (o viceversa) no
 puede iniciar sesión.
 
-### ⚠️ Esto no es un perímetro de seguridad real
+### Cómo se protege `/api/data`
 
-El servidor Express (`server.js`) sirve `/api/data` sin verificar quién hace
-la llamada: cualquiera con acceso a la URL puede leer o sobreescribir todo el
-estado, y el ID token de Google se decodifica en el navegador sin verificar su
-firma. El login sirve para dar identidad y ocultar/filtrar la interfaz según
-el rol — no para proteger información sensible de alguien con las
-herramientas de desarrollador abiertas. Si eso te importa (datos realmente
-confidenciales), `/api/data` necesita autenticación real (verificar el ID
-token en el servidor y aplicar permisos por rol ahí, no solo en el cliente).
+Cada llamada a `/api/data`, `/api/data/restore` y `/api/personas` manda el ID
+token de Google en `Authorization: Bearer <token>`. El servidor lo verifica
+de verdad (firma, expiración y audiencia) con `google-auth-library` antes de
+responder — ya no basta con la URL, ni con decodificar el token a mano en el
+navegador y confiar en lo que diga. `/api/config` es la única ruta pública
+(entrega el `googleClientId`, que de por sí va embebido en el JS del cliente
+para el botón de login).
+
+`GET /api/data` además recorta la respuesta según el rol **en el servidor**,
+no solo en la UI: `usuario` solo recibe sus propios clientes/KPIs/persona, y
+`empleados`/`bajas`/`dataQuality`/`headcount` (People Analytics) solo se
+incluyen para `super_admin`. `POST /api/data` y `/api/data/restore` exigen
+además `role === super_admin`. Las carpetas `/css`, `/js` y `/assets` se
+sirven estáticas; **`/data` nunca se sirve como archivo estático** — antes
+`express.static(__dirname)` exponía `data/*.json` (incluido `personas.json`)
+tal cual a quien pidiera la URL, sin pasar por ningún filtro.
+
+El ID token de Google dura ~1h; cuando vence, el navegador simplemente pide
+iniciar sesión de nuevo (un clic, ya con la cuenta activa) en vez de armar un
+refresco silencioso — más simple y confiable para el uso interno de esta app
+que perseguir el reintento automático del One Tap de Google.
 
 La tabla de BigQuery en sí no tiene este problema: solo el service account
 configurado en `GOOGLE_SERVICE_ACCOUNT_JSON` puede leerla, no es pública. Trata
@@ -198,7 +230,13 @@ todo el equipo directamente desde BigQuery, sin pasar por la app.
 - **Organigrama**: quién le reporta a quién.
 - **KPIs**: tabla editable de todos los KPIs de negocio.
 - **People Analytics**: Estructura, Antigüedad, Demografía, Contrataciones,
-  Calidad de datos y Cruces estratégicos — es una **foto de la plantilla
-  activa** (`Estatus = Activo` únicamente, no análisis de flujo de
-  entradas/salidas) y es **solo de consulta** (no se captura información ahí,
-  solo se visualiza lo que ya existe en `/data` y BigQuery).
+  Rotación, Calidad de datos, Cruces estratégicos y Base de datos. Las
+  primeras seis son una **foto de la plantilla activa** (`Estatus = Activo`
+  únicamente, no análisis de flujo de entradas/salidas) y son de solo
+  consulta. **Base de datos** es la excepción: lista Activos e Inactivos con
+  todas las columnas de la tabla y, para `super_admin`, un botón "Editar" por
+  fila — guardar ahí manda un `UPDATE` a la tabla de BigQuery (por
+  `INTERIUS ID`, ver `updateEmpleado()` en `bigquery.js`), no a
+  `data/store.json`. Requiere que el service account tenga además rol
+  **BigQuery Data Editor** en el dataset (la lectura solo necesita Data
+  Viewer) — sin eso el guardado responde `502`.

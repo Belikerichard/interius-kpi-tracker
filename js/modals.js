@@ -49,7 +49,7 @@ document.getElementById('mc-save').addEventListener('click', async () => {
     industria: document.getElementById('mc-industria').value.trim(),
     contacto: document.getElementById('mc-contacto').value.trim(),
   });
-  await persist();
+  if (!(await persist())) return;
   closeModal('modal-cliente');
   renderClientesGrid();
   showToast('Cliente agregado');
@@ -102,7 +102,7 @@ document.getElementById('mp-save').addEventListener('click', async () => {
   } else {
     appData.personas.push({ id: uid('per'), name, rol, reportsTo });
   }
-  await persist();
+  if (!(await persist())) return;
   closeModal('modal-persona');
   renderEquipoGrid();
   renderOrganigrama();
@@ -162,7 +162,7 @@ document.getElementById('mk-save').addEventListener('click', async () => {
   } else {
     appData.kpis.push({ id: uid('kpi'), ...payload });
   }
-  await persist();
+  if (!(await persist())) return;
   closeModal('modal-kpi');
   renderKpiTable();
   renderDashboard();

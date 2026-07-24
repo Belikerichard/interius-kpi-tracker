@@ -63,6 +63,7 @@ export async function loadEmpleadosFromBigQuery(table) {
   const empleados = [];
   const bajas = [];
   const incompletos = [];
+  const empleadosTabla = []; // vista completa (Activo + Inactivo, todas las columnas) para editar desde la app — ver updateEmpleado()
 
   for (const r of clean) {
     const id = r['INTERIUS ID'];
@@ -71,11 +72,31 @@ export async function loadEmpleadosFromBigQuery(table) {
     const area = collapseSpaces(r['Area']) || 'Sin área';
     const fechaIngreso = toIsoDate(r['Fecha de Contratación']);
     const fechaNacimiento = toIsoDate(r['Fecha de Nacimiento']);
+    const nivelPuestoRaw = collapseSpaces(r['Nivel de Puesto']);
+    const edadNum = Number(r['Edad']);
+    const activo = r['Estatus'] === 'Activo';
 
-    if (r['Estatus'] === 'Activo') {
-      const nivelPuestoRaw = collapseSpaces(r['Nivel de Puesto']);
+    empleadosTabla.push({
+      id,
+      nombre,
+      puesto,
+      nivelPuesto: NIVEL_INDEFINIDO.has(nivelPuestoRaw) ? '' : nivelPuestoRaw,
+      area: collapseSpaces(r['Area']),
+      sexo: r['Sexo'] || '',
+      edad: Number.isFinite(edadNum) ? edadNum : '',
+      fechaNacimiento,
+      fechaIngreso,
+      estatus: activo ? 'Activo' : 'Inactivo',
+      correo: (r['Correo'] || '').toLowerCase(),
+      reportsToName: collapseSpaces(r['Reporta a:']),
+      tipoBaja: activo ? '' : r['Tipo de Baja'] === 'Involuntaria' ? 'Involuntaria' : 'Voluntaria',
+      motivoBaja: activo ? '' : r['Motivo de Baja'] || '',
+      fechaBaja: activo ? null : toIsoDate(r['Fecha de Baja']),
+    });
+
+    if (activo) {
       const nivelPuesto = NIVEL_INDEFINIDO.has(nivelPuestoRaw) ? null : nivelPuestoRaw;
-      const edad = r['Edad'] ? Number(r['Edad']) : null;
+      const edad = Number.isFinite(edadNum) ? edadNum : null;
 
       personas.push({
         id,
@@ -91,7 +112,7 @@ export async function loadEmpleadosFromBigQuery(table) {
         rol: puesto,
         nivelPuesto,
         sexo: r['Sexo'] || null,
-        edad: Number.isFinite(edad) ? edad : null,
+        edad,
         fechaNacimiento,
         fechaIngreso,
         fechaPuesto: fechaIngreso, // la tabla no registra fecha de cambio de puesto
@@ -109,7 +130,6 @@ export async function loadEmpleadosFromBigQuery(table) {
     } else {
       const fecha = toIsoDate(r['Fecha de Baja']);
       if (fecha) {
-        const nivelPuestoRaw = collapseSpaces(r['Nivel de Puesto']);
         bajas.push({
           id: `baja-${id}`,
           empleado: nombre,
@@ -126,5 +146,61 @@ export async function loadEmpleadosFromBigQuery(table) {
       }
     }
   }
-  return { personas, empleados, bajas, dataQuality: { excluidos, incompletos } };
+  return { personas, empleados, bajas, dataQuality: { excluidos, incompletos }, empleadosTabla };
+}
+
+/* Columna real de BigQuery (con espacios/acentos) por cada campo editable
+   desde la app. `INTERIUS ID` nunca se edita — es la llave del UPDATE. */
+const COLUMN_BY_FIELD = {
+  nombre: 'Nombre Completo',
+  puesto: 'Puesto Completo',
+  nivelPuesto: 'Nivel de Puesto',
+  area: 'Area',
+  reportsToName: 'Reporta a:',
+  sexo: 'Sexo',
+  fechaNacimiento: 'Fecha de Nacimiento',
+  fechaIngreso: 'Fecha de Contratación',
+  estatus: 'Estatus',
+  correo: 'Correo',
+  tipoBaja: 'Tipo de Baja',
+  motivoBaja: 'Motivo de Baja',
+  fechaBaja: 'Fecha de Baja',
+};
+
+function fromIsoDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${Number(m)}/${Number(d)}/${y}`;
+}
+
+/* UPDATE por INTERIUS ID. Requiere que el service account tenga
+   BigQuery Data Editor en el dataset (además del Data Viewer / Job User
+   que ya usa la lectura) — sin eso esto tira permission denied.
+   `edad` se manda solo si viene con un número válido: no conocemos el tipo
+   real de esa columna (INT64 vs STRING) y un valor ambiguo (null/'') podría
+   no inferir tipo correctamente; el resto son columnas de texto/fecha en
+   la tabla (confirmado por cómo ya se leen) así que un string vacío es
+   seguro para "borrar" el valor. */
+export async function updateEmpleado(table, id, fields) {
+  const sets = [];
+  const params = { id: String(id) };
+  for (const [field, column] of Object.entries(COLUMN_BY_FIELD)) {
+    if (!(field in fields)) continue;
+    const paramName = `f_${field}`;
+    const raw = fields[field];
+    const value = ['fechaNacimiento', 'fechaIngreso', 'fechaBaja'].includes(field) ? fromIsoDate(raw) : (raw ?? '').toString();
+    sets.push(`\`${column}\` = @${paramName}`);
+    params[paramName] = value;
+  }
+  if ('edad' in fields) {
+    const edad = Number(fields.edad);
+    if (Number.isFinite(edad)) {
+      sets.push('`Edad` = @f_edad');
+      params.f_edad = edad;
+    }
+  }
+  if (!sets.length) return;
+  // CAST a STRING porque no conocemos si INTERIUS ID es STRING o numérico en la tabla real.
+  const query = `UPDATE \`${table}\` SET ${sets.join(', ')} WHERE CAST(\`INTERIUS ID\` AS STRING) = @id`;
+  await client().query({ query, params });
 }

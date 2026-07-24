@@ -8,12 +8,14 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
     "lint": "eslint js",
+    "test": "node --test js/calc.test.js",
     "format": "prettier --write \"js/**/*.js\" \"css/**/*.css\" \"*.html\""
   },
   "dependencies": {
     "@google-cloud/bigquery": "^8.3.1",
     "@vercel/edge-config": "^1.4.3",
     "express": "^5.2.1",
+    "google-auth-library": "^10.9.1",
     "vercel": "^54.17.3"
   },
   "devDependencies": {

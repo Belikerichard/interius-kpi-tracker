@@ -9,8 +9,8 @@ import './views/kpis.js';
 import './views/organigrama.js';
 import './views/people.js';
 
-import { appData } from './state.js';
 import { loadData, restoreSourceData } from './data.js';
+import { showToast } from './utils.js';
 import { renderDashboard } from './views/dashboard.js';
 import { restoreSession, initGoogleSignIn, logout, currentUser } from './auth.js';
 import { applyPermissionsToChrome, canEdit } from './permissions.js';
@@ -34,10 +34,15 @@ function showLoginDenied(email) {
   document.getElementById('login-denied').style.display = 'block';
 }
 
-function startGoogleSignIn() {
-  initGoogleSignIn(appData.googleClientId, document.getElementById('g-signin-button'), (result) => {
-    if (result.ok) showApp();
-    else showLoginDenied(result.email);
+function startGoogleSignIn(clientId) {
+  initGoogleSignIn(clientId, document.getElementById('g-signin-button'), async (result) => {
+    if (!result.ok) return showLoginDenied(result.email);
+    if (await loadData()) {
+      showApp();
+    } else {
+      logout();
+      showToast('No se pudo cargar la información. Intenta de nuevo.');
+    }
   });
 }
 
@@ -62,10 +67,17 @@ if (btnRestore) {
 }
 
 (async function init() {
-  await loadData();
-  if (restoreSession()) {
+  let googleClientId = '';
+  try {
+    ({ googleClientId } = await fetch('/api/config').then((r) => r.json()));
+  } catch (e) {
+    console.error('No se pudo cargar la configuración del servidor. ¿Está corriendo `npm start`?', e);
+  }
+
+  if (restoreSession() && (await loadData())) {
     showApp();
   } else {
-    startGoogleSignIn();
+    logout(); // limpia cualquier sesión guardada que ya no sirvió (vencida o sin acceso)
+    startGoogleSignIn(googleClientId);
   }
 })();
